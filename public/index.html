@@ -1,0 +1,236 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0284c7">
+  <title>Calificador IESS MSP - Enfermedad</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/css/style.css">
+  <!-- Escáner QR / Barcode -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- Lector y Exportador Excel XLSX / CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+  <header class="header">
+    <h1>
+      <span>🏥</span> Calificador de Salud
+    </h1>
+    <span class="badge-contingencia">Enfermedad (Cód. 14)</span>
+  </header>
+
+  <main class="container">
+
+    <!-- Navegación de Pestañas -->
+    <div class="tabs-nav">
+      <button type="button" class="tab-btn active" id="tab-single-btn">
+        📱 Individual / Cámara
+      </button>
+      <button type="button" class="tab-btn" id="tab-bulk-btn">
+        📂 Carga Masiva (Archivo / Lista)
+      </button>
+    </div>
+
+    <!-- ==================== MODO 1: INDIVIDUAL ==================== -->
+    <div id="view-single">
+      <!-- Card de Captura -->
+      <section class="card" id="input-card">
+        <div class="capture-grid">
+          <button type="button" class="btn-capture" id="btn-camera">
+            <svg viewBox="0 0 24 24"><path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 15a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0-2a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/></svg>
+            <span>Escanear Cédula (Cámara)</span>
+          </button>
+
+          <button type="button" class="btn-capture" id="btn-nfc">
+            <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 18H4V4h16v16zM18 6h-5c-1.1 0-2 .9-2 2v2.28c-.6.35-1 .98-1 1.72 0 1.1.9 2 2 2s2-.9 2-2c0-.74-.4-1.37-1-1.72V8h5v10H6v-5h2v3h8V6z"/></svg>
+            <span>Acercar Cédula (NFC)</span>
+          </button>
+        </div>
+
+        <!-- Contenedor del Escáner de Cámara -->
+        <div id="scanner-container">
+          <div class="scanner-overlay">
+            <button type="button" class="btn-close-scanner" id="btn-stop-camera">✕ Cerrar Cámara</button>
+          </div>
+          <div id="reader"></div>
+        </div>
+
+        <!-- Digitación Manual -->
+        <div class="manual-box">
+          <label for="cedula-input">Número de Cédula (10 dígitos):</label>
+          <div class="input-group">
+            <input 
+              type="tel" 
+              id="cedula-input" 
+              class="cedula-input" 
+              placeholder="17XXXXXXXX" 
+              maxlength="10" 
+              autocomplete="off"
+              inputmode="numeric"
+            >
+            <button type="button" id="btn-consultar" class="btn-consultar" disabled>
+              Consultar
+            </button>
+          </div>
+          <div id="validation-hint" class="validation-hint"></div>
+        </div>
+      </section>
+
+      <!-- Loader Individual -->
+      <section class="card" id="loader">
+        <div class="spinner"></div>
+        <p style="font-weight: 600; color: var(--slate-800);">Consultando acreditación en IESS...</p>
+        <p style="font-size: 0.82rem; color: var(--slate-600); margin-top: 4px;">Validando cobertura de Enfermedad</p>
+      </section>
+
+      <!-- Tarjeta de Resultados Individual (Semáforo) -->
+      <section class="card" id="result-container">
+        <div id="status-banner" class="status-banner">
+          <div id="status-title" class="status-title">---</div>
+          <div id="status-desc" class="status-desc">---</div>
+        </div>
+
+        <div class="details-list">
+          <div class="detail-row">
+            <span class="detail-label">Cédula:</span>
+            <span class="detail-value" id="res-cedula">---</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Paciente / Asegurado:</span>
+            <span class="detail-value" id="res-nombres">---</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Tipo de Afiliación:</span>
+            <span class="detail-value" id="res-afiliacion">---</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Contingencia:</span>
+            <span class="detail-value">Enfermedad (Código 14)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Tiempo de respuesta:</span>
+            <span class="detail-value" id="res-tiempo">---</span>
+          </div>
+        </div>
+
+        <!-- Detalle MSP / RPIS -->
+        <div class="msp-box" id="msp-box">
+          <div class="msp-title">Red Pública Integral de Salud (MSP / RPIS):</div>
+          <div id="msp-desc" style="color: var(--slate-600);">---</div>
+        </div>
+
+        <button type="button" class="btn-nueva-consulta" id="btn-nueva-consulta">
+          ↻ Nueva Consulta
+        </button>
+      </section>
+    </div>
+
+    <!-- ==================== MODO 2: MASIVO ==================== -->
+    <div id="view-bulk" style="display: none;">
+      <section class="card">
+        <h2 style="font-size: 1.1rem; margin-bottom: 8px; color: var(--slate-900);">
+          Calificación Masiva de Pacientes
+        </h2>
+        <p style="font-size: 0.85rem; color: var(--slate-600); margin-bottom: 14px;">
+          <strong>Recomendado para lotes grandes:</strong> Sube directamente tu archivo Excel (<code>.xlsx</code>) o pega las cédulas en el cuadro. El sistema restaura automáticamente el <code>0</code> a la izquierda si Excel lo borró.
+        </p>
+
+        <!-- Dropzone de Archivo -->
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="file-input" accept=".xlsx, .xls, .csv, .txt" style="display: none;">
+          <svg viewBox="0 0 24 24" class="dropzone-icon"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm1 7V3.5L18.5 7H15zM4 20V4h9v5h5v11H4z"/></svg>
+          <p style="font-weight: 700; color: var(--primary-dark); margin-bottom: 4px; font-size: 0.95rem;">
+            📁 Clic aquí para seleccionar tu archivo Excel (.xlsx / .csv)
+          </p>
+          <span style="font-size: 0.8rem; color: var(--slate-600);">O arrastra el archivo directamente sobre esta zona</span>
+        </div>
+
+        <!-- O pegar lista manual -->
+        <div style="margin-top: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label for="bulk-textarea" style="font-size: 0.82rem; font-weight: 700; color: var(--slate-700);">
+              O pega aquí tu listado de cédulas:
+            </label>
+            <span id="bulk-counter-live" style="font-size: 0.8rem; font-weight: 700; color: var(--primary);">
+              0 cédulas detectadas
+            </span>
+          </div>
+          <textarea id="bulk-textarea" class="bulk-textarea" style="height: 110px;" placeholder="Pega aquí las 4000 cédulas (desde Excel, Word o Bloc de notas)..."></textarea>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 14px;">
+          <button type="button" class="btn-primary-action" id="btn-start-bulk">
+            ▶ Iniciar Calificación Masiva
+          </button>
+          <button type="button" class="btn-secondary-action" id="btn-stop-bulk" style="display: none;">
+            ⏹ Detener Proceso
+          </button>
+        </div>
+      </section>
+
+      <!-- Panel de Progreso y Métricas Masivas -->
+      <section class="card" id="bulk-progress-card" style="display: none;">
+        <div class="progress-header">
+          <span style="font-weight: 700; font-size: 0.95rem;">Progreso de Calificación:</span>
+          <span id="bulk-progress-text" style="font-weight: 700; color: var(--primary);">0 / 0</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="bulk-progress-fill" style="width: 0%;"></div>
+        </div>
+
+        <!-- Tarjetas de Estadísticas -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-num" id="stat-total">0</span>
+            <span class="stat-lbl">Total</span>
+          </div>
+          <div class="stat-card green">
+            <span class="stat-num" id="stat-acreditados">0</span>
+            <span class="stat-lbl">Acreditados</span>
+          </div>
+          <div class="stat-card red">
+            <span class="stat-num" id="stat-no-acreditados">0</span>
+            <span class="stat-lbl">Sin Cobertura</span>
+          </div>
+          <div class="stat-card yellow">
+            <span class="stat-num" id="stat-invalidos">0</span>
+            <span class="stat-lbl">Inválidas</span>
+          </div>
+        </div>
+
+        <!-- Botón Exportar -->
+        <button type="button" class="btn-export-excel" id="btn-export-excel" style="display: none;">
+          📥 Descargar Resultados en Excel (.xlsx)
+        </button>
+      </section>
+
+      <!-- Tabla de Resultados Masivos -->
+      <section class="card" id="bulk-table-card" style="display: none; padding: 12px;">
+        <h3 style="font-size: 0.95rem; margin-bottom: 10px; font-weight: 700;">Resultados en Tiempo Real:</h3>
+        <div class="table-responsive">
+          <table class="bulk-table" id="bulk-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Cédula</th>
+                <th>Paciente</th>
+                <th>Estado</th>
+                <th>Afiliación</th>
+                <th>Observación</th>
+              </tr>
+            </thead>
+            <tbody id="bulk-table-body">
+              <!-- Filas dinámicas -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

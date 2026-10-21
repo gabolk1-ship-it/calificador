@@ -1,0 +1,10 @@
+﻿node_modules/
+*.log
+submit_full.xml
+ajax_res.xml
+iess_test.html
+post_res.html
+submitXml_debug.xml
+test_altcha.mjs
+patch.js
+4000_cedulas_test.txt

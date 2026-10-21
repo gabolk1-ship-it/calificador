@@ -1,0 +1,20 @@
+﻿{
+  "name": "calificador-derecho-iess-msp",
+  "version": "1.0.0",
+  "description": "Calificador unificado de derecho a salud para IESS y MSP con soporte móvil, cámara y NFC",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": ["iess", "msp", "calificador", "salud", "ecuador", "nfc", "qr"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "cheerio": "^1.0.0"
+  }
+}
