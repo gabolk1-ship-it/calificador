@@ -22,10 +22,9 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Build APK with Gradle
+    - name: Build APK with Gradle Wrapper
       run: |
         cd android
-        gradle wrapper --gradle-version 8.6
         chmod +x gradlew
         ./gradlew assembleDebug --stacktrace
 
