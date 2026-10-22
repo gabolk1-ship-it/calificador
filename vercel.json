@@ -1,11 +1,6 @@
 ﻿{
-  "builds": [
-    { "src": "api/*.js", "use": "@vercel/node" },
-    { "src": "public/**", "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "/api/validar/(.*)", "dest": "/api/validar?cedula=$1" },
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/public/$1" }
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/api/validar/:cedula", "destination": "/api/validar?cedula=:cedula" }
   ]
 }
