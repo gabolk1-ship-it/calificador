@@ -1,6 +1,9 @@
-﻿{
+{
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/api/validar/:cedula", "destination": "/api/validar?cedula=:cedula" }
+    {
+      "source": "/api/validar/:cedula",
+      "destination": "/api/validar?cedula=:cedula"
+    }
   ]
 }
