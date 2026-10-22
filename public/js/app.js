@@ -399,6 +399,45 @@ fileInput.addEventListener('change', (e) => {
   }
 });
 
+// Carga automática directa desde C:\DATOSMIS
+const btnLoadDatosmis = document.getElementById('btn-load-datosmis');
+if (btnLoadDatosmis) {
+  btnLoadDatosmis.addEventListener('click', async () => {
+    btnLoadDatosmis.disabled = true;
+    const textoOriginal = btnLoadDatosmis.innerHTML;
+    btnLoadDatosmis.innerHTML = '<span>⏳ Leyendo C:\\DATOSMIS...</span>';
+
+    try {
+      const res = await fetch('/api/cargar-datosmis');
+      const data = await res.json();
+
+      if (!data.exito) {
+        alert(`Aviso: ${data.mensaje}`);
+        btnLoadDatosmis.disabled = false;
+        btnLoadDatosmis.innerHTML = textoOriginal;
+        return;
+      }
+
+      bulkTextarea.value = data.cedulas.join('\n');
+      actualizarContadorLive();
+
+      alert(`¡Archivo cargado automáticamente!\n\n` +
+            `• Archivo leído: ${data.archivo}\n` +
+            `• Total registros de atención médica: ${data.totalAtenciones}\n` +
+            `• Pacientes únicos listos: ${data.unicasCount}\n` +
+            `• Cédulas con '0' inicial restaurado: ${data.conCeroRecuperado}\n\n` +
+            `Ya están en pantalla listos para pulsar "Iniciar Calificación Masiva".`);
+
+      btnLoadDatosmis.disabled = false;
+      btnLoadDatosmis.innerHTML = `<span>✓ Cargado: ${data.archivo} (${data.unicasCount} pacientes)</span>`;
+    } catch (err) {
+      alert(`No se pudo cargar desde el servidor local: ${err.message}`);
+      btnLoadDatosmis.disabled = false;
+      btnLoadDatosmis.innerHTML = textoOriginal;
+    }
+  });
+}
+
 function procesarArchivoSeleccionado(file) {
   const ext = file.name.split('.').pop().toLowerCase();
 

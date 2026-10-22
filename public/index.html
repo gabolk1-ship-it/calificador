@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
@@ -136,6 +136,13 @@
         <p style="font-size: 0.85rem; color: var(--slate-600); margin-bottom: 14px;">
           <strong>Recomendado para lotes grandes:</strong> Sube directamente tu archivo Excel (<code>.xlsx</code>) o pega las cédulas en el cuadro. El sistema restaura automáticamente el <code>0</code> a la izquierda si Excel lo borró.
         </p>
+
+        <!-- Botón de carga automática directa de C:\DATOSMIS -->
+        <div style="margin-bottom: 14px;">
+          <button type="button" id="btn-load-datosmis" style="width: 100%; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; border: none; border-radius: 12px; padding: 14px; font-size: 0.95rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);">
+            <span>⚡ Cargar automáticamente archivo de hoy (desde C:\DATOSMIS)</span>
+          </button>
+        </div>
 
         <!-- Dropzone de Archivo -->
         <div class="dropzone" id="dropzone">
