@@ -305,6 +305,23 @@ btnNfc.addEventListener('click', async () => {
   }
 });
 
+// Integración con Android Nativo (Bridge)
+if (window.AndroidBridge) {
+  btnNfc.querySelector('span').textContent = 'NFC Nativo Activo';
+}
+
+window.onNativeNfcDiscovered = function(data) {
+  feedbackEscaneo();
+  if (data.esCedulaElectronica) {
+    if (window.AndroidBridge && window.AndroidBridge.showToast) {
+      window.AndroidBridge.showToast('Chip de Cédula Electrónica detectado por NFC');
+    }
+    if (cedulaInput.value && validarCedulaCliente(cedulaInput.value)) {
+      ejecutarConsultaIndividual(cedulaInput.value);
+    }
+  }
+};
+
 // ==========================================
 // 4. CONSULTA INDIVIDUAL
 // ==========================================
