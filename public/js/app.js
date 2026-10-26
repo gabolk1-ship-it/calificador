@@ -266,8 +266,23 @@ async function cerrarCamara() {
 
 // NFC
 btnNfc.addEventListener('click', async () => {
+  // 1. Si está ejecutándose dentro de la App Nativa Android
+  if (window.AndroidBridge) {
+    if (window.AndroidBridge.showToast) {
+      window.AndroidBridge.showToast('NFC Activo: Acerca la cédula a la parte posterior del teléfono');
+    }
+    btnNfc.style.borderColor = 'var(--warning)';
+    btnNfc.querySelector('span').textContent = 'Acerca la cédula al teléfono...';
+    setTimeout(() => {
+      btnNfc.style.borderColor = 'var(--primary)';
+      btnNfc.querySelector('span').textContent = 'NFC Nativo Activo';
+    }, 4000);
+    return;
+  }
+
+  // 2. Si está en navegador web estándar
   if (!('NDEFReader' in window)) {
-    alert('Tu navegador no soporta Web NFC directo.\nUsa la cámara o digita la cédula.');
+    alert('Tu navegador web no soporta Web NFC directo.\nUsa la cámara para escanear el código de barras o instala la App oficial.');
     return;
   }
 
@@ -299,9 +314,14 @@ btnNfc.addEventListener('click', async () => {
       }
     };
   } catch (error) {
-    alert(`Error NFC: ${error.message}`);
     btnNfc.style.borderColor = 'var(--primary)';
     btnNfc.querySelector('span').textContent = 'Acercar Cédula (NFC)';
+
+    if (error.name === 'NotAllowedError') {
+      alert('Permiso NFC no concedido en el navegador.\n\nPara activarlo en Chrome:\n1. Toca el icono de configuración a la izquierda del enlace.\n2. Ve a "Permisos" y activa "NFC".\n\nO usa el botón de Cámara que lee el código de barras al instante.');
+    } else {
+      alert(`Información NFC: ${error.message}\nUsa la cámara para lectura instantánea.`);
+    }
   }
 });
 
@@ -312,13 +332,19 @@ if (window.AndroidBridge) {
 
 window.onNativeNfcDiscovered = function(data) {
   feedbackEscaneo();
-  if (data.esCedulaElectronica) {
-    if (window.AndroidBridge && window.AndroidBridge.showToast) {
-      window.AndroidBridge.showToast('Chip de Cédula Electrónica detectado por NFC');
-    }
-    if (cedulaInput.value && validarCedulaCliente(cedulaInput.value)) {
-      ejecutarConsultaIndividual(cedulaInput.value);
-    }
+  if (window.AndroidBridge && window.AndroidBridge.showToast) {
+    window.AndroidBridge.showToast('¡Cédula detectada por NFC!');
+  }
+  btnNfc.style.borderColor = 'var(--success)';
+  btnNfc.querySelector('span').textContent = 'Cédula Detectada';
+
+  if (cedulaInput.value && validarCedulaCliente(cedulaInput.value)) {
+    ejecutarConsultaIndividual(cedulaInput.value);
+  } else {
+    setTimeout(() => {
+      btnNfc.style.borderColor = 'var(--primary)';
+      btnNfc.querySelector('span').textContent = window.AndroidBridge ? 'NFC Nativo Activo' : 'Acercar Cédula (NFC)';
+    }, 3000);
   }
 };
 
