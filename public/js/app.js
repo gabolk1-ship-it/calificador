@@ -269,6 +269,12 @@ async function cerrarCamara() {
 
 // NFC
 btnNfc.addEventListener('click', async () => {
+  // Si el botón sugiere usar la cámara tras detectar el chip protegido
+  if (btnNfc.querySelector('span').textContent.includes('Cámara')) {
+    btnCamera.click();
+    return;
+  }
+
   // 1. Si está ejecutándose dentro de la App Nativa Android
   if (window.AndroidBridge) {
     if (window.AndroidBridge.showToast) {
@@ -498,13 +504,22 @@ window.onNativeNfcDiscovered = function(data) {
     return;
   }
 
-  // CASO 4: Tarjeta NFC genérica o serial detectado
+  // CASO 4: Tarjeta NFC o chip con serial de hardware (ej. 043518A3)
   if (data.serialHex) {
     btnNfc.style.borderColor = 'var(--warning)';
-    btnNfc.querySelector('span').textContent = 'Tag NFC: ' + data.serialHex.substring(0, 8);
+    btnNfc.querySelector('span').textContent = '📸 Toca Cámara (0.1s)';
+    
     if (window.AndroidBridge && window.AndroidBridge.showToast) {
-      window.AndroidBridge.showToast('NFC detectado (' + data.serialHex.substring(0, 8) + ')');
+      window.AndroidBridge.showToast('Chip detectado: Toca "Escanear Cámara" para calificar');
     }
+
+    if (scannerBanner && scannerBannerText) {
+      scannerBanner.classList.add('flash-success');
+      scannerBannerText.innerHTML = `<strong>Chip NFC Detectado (${data.serialHex.substring(0, 8)}):</strong> Por seguridad nacional ICAO, la cédula no se transmite al aire. <strong>Toca "Escanear Cámara" para calificar en 0.1s.</strong>`;
+    }
+
+    validationHint.textContent = `💡 Chip NFC ${data.serialHex.substring(0, 8)} detectado. Toca 'Escanear Cámara' o enfoca el código del reverso.`;
+    validationHint.className = 'validation-hint';
   }
 };
 

@@ -161,15 +161,26 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
                 isoDep.timeout = 2500
 
                 // Paso A: SELECT e-Passport / e-ID MRTD Application (AID: A0 00 00 02 47 10 01)
-                val selectMrtdApdu = byteArrayOf(
+                var selectMrtdApdu = byteArrayOf(
                     0x00.toByte(), 0xA4.toByte(), 0x04.toByte(), 0x0C.toByte(),
                     0x07.toByte(),
                     0xA0.toByte(), 0x00.toByte(), 0x00.toByte(), 0x02.toByte(),
                     0x47.toByte(), 0x10.toByte(), 0x01.toByte()
                 )
 
-                val response = isoDep.transceive(selectMrtdApdu)
-                val sw = bytesToHex(response.takeLast(2).toByteArray())
+                var response = isoDep.transceive(selectMrtdApdu)
+                var sw = bytesToHex(response.takeLast(2).toByteArray())
+
+                if (sw != "9000" && !sw.startsWith("61")) {
+                    val selectMrtdP200 = byteArrayOf(
+                        0x00.toByte(), 0xA4.toByte(), 0x04.toByte(), 0x00.toByte(),
+                        0x07.toByte(),
+                        0xA0.toByte(), 0x00.toByte(), 0x00.toByte(), 0x02.toByte(),
+                        0x47.toByte(), 0x10.toByte(), 0x01.toByte()
+                    )
+                    response = isoDep.transceive(selectMrtdP200)
+                    sw = bytesToHex(response.takeLast(2).toByteArray())
+                }
 
                 val isMrtd = sw == "9000" || sw.startsWith("61")
                 jsonResult.put("esCedulaElectronica", isMrtd)
