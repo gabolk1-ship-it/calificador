@@ -109,7 +109,7 @@ function validarCedulaCliente(cedula) {
   return digitoEsperado === parseInt(limpia[9], 10);
 }
 
-// Extrae y normaliza cédula desde texto escaneado o celda
+// Extrae y normaliza cédula desde texto escaneado, código de barras o celda
 function extraerCedulaDeTexto(texto) {
   if (!texto) return null;
   const str = String(texto).trim();
@@ -120,14 +120,21 @@ function extraerCedulaDeTexto(texto) {
     return normal;
   }
 
-  // 2. Buscar secuencias de 10 o 9 dígitos en texto complejo
-  const matches = str.match(/\b\d{9,10}\b/g) || [];
-  for (const m of matches) {
+  // 2. Buscar secuencias con límites de palabra (\b)
+  const wordMatches = str.match(/\b\d{9,10}\b/g) || [];
+  for (const m of wordMatches) {
     const cand = normalizarCedula(m);
     if (validarCedulaCliente(cand)) return cand;
   }
 
-  // 3. Fallback: remover caracteres no numéricos
+  // 3. Buscar cualquier secuencia continua de 9 o 10 dígitos (para PDF417 o MRZ con prefijos como ECU...)
+  const anyDigits = str.match(/\d{9,10}/g) || [];
+  for (const d of anyDigits) {
+    const cand = normalizarCedula(d);
+    if (validarCedulaCliente(cand)) return cand;
+  }
+
+  // 4. Fallback: remover caracteres no numéricos completos
   const soloNum = str.replace(/\D/g, '');
   if (soloNum.length === 9 || soloNum.length === 10) {
     const cand = normalizarCedula(soloNum);
@@ -215,9 +222,18 @@ function feedbackEscaneo() {
 }
 
 const btnToggleTorch = document.getElementById('btn-toggle-torch');
+const btnSwitchCamera = document.getElementById('btn-switch-camera');
+const cameraLabel = document.getElementById('camera-label');
+const scannerZoomBar = document.getElementById('scanner-zoom-bar');
+const zoomButtons = document.querySelectorAll('.btn-zoom');
+
 let isTorchOn = false;
 let isCameraBusy = false;
+let availableCameras = [];
+let currentCameraIndex = 0;
+let textDetectorInterval = null;
 
+// Control de Linterna
 if (btnToggleTorch) {
   btnToggleTorch.addEventListener('click', async () => {
     if (!html5QrCode) return;
@@ -226,7 +242,7 @@ if (btnToggleTorch) {
       await html5QrCode.applyVideoConstraints({
         advanced: [{ torch: isTorchOn }]
       });
-      btnToggleTorch.textContent = isTorchOn ? '💡 Apagar' : '💡 Linterna';
+      btnToggleTorch.innerHTML = isTorchOn ? '💡 <span class="tool-label">Apagar</span>' : '💡 <span class="tool-label">Linterna</span>';
       btnToggleTorch.classList.toggle('active', isTorchOn);
     } catch (e) {
       console.warn('Torch no soportado:', e);
@@ -234,41 +250,227 @@ if (btnToggleTorch) {
   });
 }
 
+// Control de Zoom Rápido (1x, 1.5x, 2x, 3x)
+async function setCameraZoom(zoomLevel) {
+  if (!html5QrCode) return;
+  try {
+    await html5QrCode.applyVideoConstraints({
+      advanced: [{ zoom: zoomLevel }]
+    });
+    zoomButtons.forEach(btn => {
+      const z = parseFloat(btn.dataset.zoom);
+      btn.classList.toggle('active', Math.abs(z - zoomLevel) < 0.1);
+    });
+  } catch (e) {
+    console.warn('Zoom no soportado:', e);
+  }
+}
+
+zoomButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const z = parseFloat(btn.dataset.zoom);
+    if (!isNaN(z)) setCameraZoom(z);
+  });
+});
+
+// Control de Cambio de Cámara / Lente (Lente 1x vs 2x vs Gran Angular)
+if (btnSwitchCamera) {
+  btnSwitchCamera.addEventListener('click', async () => {
+    if (isCameraBusy || availableCameras.length <= 1) return;
+    currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
+    await reiniciarCamaraConIndice(currentCameraIndex);
+  });
+}
+
+async function reiniciarCamaraConIndice(index) {
+  await cerrarCamaraSilencioso();
+  scannerContainer.style.display = 'block';
+  await iniciarEscaneoConDispositivo(availableCameras[index]);
+}
+
+async function cerrarCamaraSilencioso() {
+  if (textDetectorInterval) {
+    clearInterval(textDetectorInterval);
+    textDetectorInterval = null;
+  }
+  if (html5QrCode) {
+    if (isTorchOn) {
+      try {
+        await html5QrCode.applyVideoConstraints({ advanced: [{ torch: false }] });
+      } catch (_) {}
+      isTorchOn = false;
+      if (btnToggleTorch) {
+        btnToggleTorch.innerHTML = '💡 <span class="tool-label">Linterna</span>';
+        btnToggleTorch.classList.remove('active');
+      }
+    }
+    try {
+      if (html5QrCode.isScanning) await html5QrCode.stop();
+    } catch (_) {}
+    try {
+      await html5QrCode.clear();
+    } catch (_) {}
+    html5QrCode = null;
+  }
+}
+
 async function cerrarCamara() {
   if (isCameraBusy) return;
   isCameraBusy = true;
   try {
-    if (html5QrCode) {
-      if (isTorchOn) {
-        try {
-          await html5QrCode.applyVideoConstraints({ advanced: [{ torch: false }] });
-        } catch (_) {}
-        isTorchOn = false;
-        if (btnToggleTorch) {
-          btnToggleTorch.textContent = '💡 Linterna';
-          btnToggleTorch.classList.remove('active');
-        }
-      }
-      try {
-        if (html5QrCode.isScanning) {
-          await html5QrCode.stop();
-        }
-      } catch (_) {}
-      try {
-        await html5QrCode.clear();
-      } catch (_) {}
-      html5QrCode = null;
-    }
+    await cerrarCamaraSilencioso();
   } catch (_) {}
   finally {
     scannerContainer.style.display = 'none';
     if (btnToggleTorch) btnToggleTorch.style.display = 'none';
+    if (btnSwitchCamera) btnSwitchCamera.style.display = 'none';
+    if (scannerZoomBar) scannerZoomBar.style.display = 'none';
+    isCameraBusy = false;
+  }
+}
+
+async function iniciarEscaneoConDispositivo(cameraDevice) {
+  isCameraBusy = true;
+  try {
+    const formats = [];
+    if (window.Html5QrcodeSupportedFormats) {
+      formats.push(
+        Html5QrcodeSupportedFormats.PDF_417,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.DATA_MATRIX
+      );
+    }
+
+    // useBarCodeDetectorIfSupported: FALSE para forzar ZXing nativo en JS, que decodifica PDF417 denso sin fallar
+    html5QrCode = new Html5Qrcode("reader", {
+      useBarCodeDetectorIfSupported: false,
+      formatsToSupport: formats.length > 0 ? formats : undefined,
+      verbose: false
+    });
+
+    const isMobilePortrait = window.innerWidth <= 600 && window.innerHeight > window.innerWidth;
+
+    // Configuración visual que aprovecha el alto de la pantalla del celular sin recortar en franja
+    const config = {
+      fps: 22,
+      qrbox: (viewfinderWidth, viewfinderHeight) => {
+        const w = Math.round(viewfinderWidth * 0.88);
+        const h = Math.round(Math.min(viewfinderHeight * 0.65, Math.max(w * 0.55, 180)));
+        return { width: Math.max(w, 240), height: Math.max(h, 160) };
+      },
+      aspectRatio: isMobilePortrait ? 1.0 : 1.35
+    };
+
+    const targetCameraId = cameraDevice ? cameraDevice.id : null;
+
+    // Preferir resolución HD y autoenfoque continuo para nitidez en códigos densos
+    const primaryConstraints = targetCameraId ? {
+      deviceId: { exact: targetCameraId },
+      width: { ideal: 1920, min: 1280 },
+      height: { ideal: 1080, min: 720 },
+      advanced: [{ focusMode: "continuous" }]
+    } : {
+      facingMode: "environment",
+      width: { ideal: 1920, min: 1280 },
+      height: { ideal: 1080, min: 720 },
+      advanced: [{ focusMode: "continuous" }]
+    };
+
+    const onDecoded = (decodedText) => {
+      const cedulaEncontrada = extraerCedulaDeTexto(decodedText);
+      if (cedulaEncontrada) {
+        feedbackEscaneo();
+        cerrarCamara();
+        cedulaInput.value = cedulaEncontrada;
+        btnConsultar.disabled = false;
+        validationHint.textContent = `✓ Escaneado: ${cedulaEncontrada}`;
+        validationHint.className = 'validation-hint valid';
+        ejecutarConsultaIndividual(cedulaEncontrada);
+      }
+    };
+
+    try {
+      await html5QrCode.start(primaryConstraints, config, onDecoded, () => {});
+    } catch (hdErr) {
+      console.warn("Fallo de resolución HD, intentando fallback:", hdErr);
+      const fallbackConstraints = targetCameraId 
+        ? { deviceId: { exact: targetCameraId } } 
+        : { facingMode: "environment" };
+      await html5QrCode.start(fallbackConstraints, config, onDecoded, () => {});
+    }
+
+    // Configurar linterna si el teléfono la soporta
+    try {
+      const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+      if (capabilities && capabilities.torchFeature && capabilities.torchFeature().isSupported()) {
+        if (btnToggleTorch) btnToggleTorch.style.display = 'inline-flex';
+      }
+    } catch (_) {}
+
+    // Configurar barra de zoom óptico/digital si el hardware lo soporta
+    try {
+      const mediaTrack = html5QrCode.getRunningTrack();
+      if (mediaTrack && mediaTrack.getCapabilities) {
+        const caps = mediaTrack.getCapabilities();
+        if (caps.zoom) {
+          if (scannerZoomBar) scannerZoomBar.style.display = 'flex';
+          zoomButtons.forEach(btn => {
+            const z = parseFloat(btn.dataset.zoom);
+            btn.style.display = (z <= (caps.zoom.max || 8)) ? 'inline-block' : 'none';
+          });
+        }
+      }
+    } catch (_) {}
+
+    // OCR / TextDetector si el navegador lo soporta (reconocimiento del número de cédula escrito)
+    if ('TextDetector' in window) {
+      try {
+        const textDetector = new TextDetector();
+        textDetectorInterval = setInterval(async () => {
+          if (!html5QrCode || !html5QrCode.isScanning) return;
+          const videoEl = document.querySelector('#reader video');
+          if (!videoEl || videoEl.readyState < 2) return;
+          try {
+            const detectedTexts = await textDetector.detect(videoEl);
+            for (const t of detectedTexts) {
+              const ced = extraerCedulaDeTexto(t.rawValue);
+              if (ced) {
+                onDecoded(ced);
+                break;
+              }
+            }
+          } catch (_) {}
+        }, 320);
+      } catch (_) {}
+    }
+
+    // Mostrar botón de cambio de cámara si hay más de un lente trasero disponible
+    if (availableCameras.length > 1 && btnSwitchCamera) {
+      btnSwitchCamera.style.display = 'inline-flex';
+      if (cameraLabel) {
+        cameraLabel.textContent = `Lente ${currentCameraIndex + 1}/${availableCameras.length}`;
+      }
+    }
+
+  } catch (err) {
+    console.error("Error al iniciar cámara:", err);
+    await cerrarCamaraSilencioso();
+    scannerContainer.style.display = 'none';
+
+    const msg = (err && (err.message || String(err))) || '';
+    if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
+      alert('Permiso de cámara no concedido.\nActiva el permiso de cámara en la app o navegador para escanear.');
+    } else if (!msg.includes('already under transition')) {
+      alert(`No se pudo acceder a la cámara: ${msg}`);
+    }
+  } finally {
     isCameraBusy = false;
   }
 }
 
 btnCamera.addEventListener('click', async () => {
-  // Evitar transiciones concurrentes por toques rápidos
   if (isCameraBusy) return;
 
   if (scannerContainer.style.display === 'block') {
@@ -280,84 +482,24 @@ btnCamera.addEventListener('click', async () => {
   scannerContainer.style.display = 'block';
 
   try {
-    // Si quedó alguna sesión previa, limpiarla de raíz
-    if (html5QrCode) {
-      try {
-        if (html5QrCode.isScanning) await html5QrCode.stop();
-        await html5QrCode.clear();
-      } catch (_) {}
-      html5QrCode = null;
-    }
-
-    // Configurar formatos prioritarios para la cédula ecuatoriana
-    const formats = [];
-    if (window.Html5QrcodeSupportedFormats) {
-      formats.push(
-        Html5QrcodeSupportedFormats.PDF_417,
-        Html5QrcodeSupportedFormats.QR_CODE,
-        Html5QrcodeSupportedFormats.CODE_128
-      );
-    }
-
-    html5QrCode = new Html5Qrcode("reader", {
-      useBarCodeDetectorIfSupported: true,
-      formatsToSupport: formats.length > 0 ? formats : undefined,
-      verbose: false
-    });
-
-    const config = {
-      fps: 20,
-      qrbox: (viewfinderWidth, viewfinderHeight) => {
-        const w = Math.min(viewfinderWidth * 0.90, 360);
-        const h = Math.max(Math.min(w * 0.45, 140), 90);
-        return { width: Math.round(w), height: Math.round(h) };
-      },
-      aspectRatio: 1.6
-    };
-
-    // facingMode: "environment" garantiza compatibilidad total con todo Android
-    await html5QrCode.start(
-      { facingMode: "environment" },
-      config,
-      (decodedText) => {
-        const cedulaEncontrada = extraerCedulaDeTexto(decodedText);
-        if (cedulaEncontrada) {
-          feedbackEscaneo();
-          cerrarCamara();
-          cedulaInput.value = cedulaEncontrada;
-          btnConsultar.disabled = false;
-          validationHint.textContent = `✓ Escaneado: ${cedulaEncontrada}`;
-          validationHint.className = 'validation-hint valid';
-          ejecutarConsultaIndividual(cedulaEncontrada);
-        }
-      },
-      () => {}
-    );
-
-    // Linterna si la cámara del teléfono lo soporta
+    // Enumerar cámaras del dispositivo para seleccionar prioritariamente el sensor trasero principal (1x)
     try {
-      const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
-      if (capabilities && capabilities.torchFeature && capabilities.torchFeature().isSupported()) {
-        if (btnToggleTorch) btnToggleTorch.style.display = 'inline-block';
+      const devices = await Html5Qrcode.getCameras();
+      if (devices && devices.length > 0) {
+        const rear = devices.filter(d => 
+          /back|rear|trasera|environment|0\b/i.test(d.label) || 
+          !/front|delantera|selfie|user/i.test(d.label)
+        );
+        availableCameras = rear.length > 0 ? rear : devices;
       }
-    } catch (_) {}
-
-  } catch (err) {
-    console.error("Error al iniciar cámara:", err);
-    try {
-      if (html5QrCode) {
-        await html5QrCode.clear();
-        html5QrCode = null;
-      }
-    } catch (_) {}
-    scannerContainer.style.display = 'none';
-
-    const msg = (err && (err.message || String(err))) || '';
-    if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
-      alert('Permiso de cámara no concedido.\nActiva el permiso de cámara en la app o navegador para escanear.');
-    } else if (!msg.includes('already under transition')) {
-      alert(`No se pudo acceder a la cámara: ${msg}`);
+    } catch (e) {
+      console.warn("No se pudo enumerar cámaras:", e);
+      availableCameras = [];
     }
+
+    currentCameraIndex = 0;
+    const selectedCam = availableCameras.length > 0 ? availableCameras[0] : null;
+    await iniciarEscaneoConDispositivo(selectedCam);
   } finally {
     isCameraBusy = false;
   }

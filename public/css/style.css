@@ -242,64 +242,185 @@ body {
   }
 }
 
-/* Lector Cámara */
+/* Lector Cámara Profesional Adaptativo */
 #scanner-container {
   display: none;
-  background: black;
+  background: #090d16;
   border-radius: 16px;
   overflow: hidden;
   position: relative;
   margin-bottom: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 #reader {
   width: 100% !important;
+  min-height: 280px;
+  position: relative;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.scanner-overlay {
+#reader video {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 55vh !important;
+  object-fit: cover !important;
+  border-radius: 10px !important;
+  display: block !important;
+}
+
+#reader canvas {
+  max-width: 100% !important;
+}
+
+#reader__scan_region {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+}
+
+#reader__dashboard {
+  display: none !important;
+}
+
+/* Barra superior de herramientas sobre el video */
+.scanner-header-bar {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 10;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 25;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.scanner-left-tools {
   display: flex;
   gap: 8px;
+  pointer-events: auto;
 }
 
-.btn-torch {
-  background: rgba(0, 0, 0, 0.75);
-  color: #fef08a;
-  border: 1px solid rgba(254, 240, 138, 0.4);
-  padding: 8px 12px;
+.btn-scanner-tool {
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 6px 12px;
   border-radius: 20px;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: all 0.2s;
 }
 
-.btn-torch.active {
+.btn-scanner-tool:hover {
+  background: rgba(30, 41, 59, 0.95);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.btn-scanner-tool.active {
   background: #facc15;
   color: #713f12;
   border-color: #eab308;
+  font-weight: 700;
 }
 
 .btn-close-scanner {
-  background: rgba(0, 0, 0, 0.75);
+  pointer-events: auto;
+  background: rgba(220, 38, 38, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: white;
-  border: none;
-  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 6px 14px;
   border-radius: 20px;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: background 0.2s;
 }
 
-.scanner-guide-text {
-  background: rgba(15, 23, 42, 0.85);
-  color: #f8fafc;
+.btn-close-scanner:hover {
+  background: rgba(185, 28, 28, 0.95);
+}
+
+/* Barra de Zoom Rápido */
+.scanner-zoom-bar {
+  position: absolute;
+  bottom: 64px;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.zoom-title {
+  color: #cbd5e1;
+  font-size: 0.76rem;
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+.btn-zoom {
+  background: rgba(30, 41, 59, 0.85);
+  color: #f1f5f9;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 14px;
   font-size: 0.78rem;
-  padding: 8px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-zoom.active {
+  background: var(--primary);
+  color: white;
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(2, 132, 199, 0.7);
+}
+
+/* Guía de lectura al pie */
+.scanner-guide-text {
+  background: rgba(15, 23, 42, 0.95);
+  color: #f8fafc;
+  padding: 10px 14px;
   text-align: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  z-index: 10;
+  position: relative;
+}
+
+.guide-main {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.guide-sub {
+  font-size: 0.74rem;
+  color: #94a3b8;
+  margin-top: 3px;
 }
 
 /* Input Manual */
@@ -736,5 +857,43 @@ body {
     min-width: 80px;
     padding: 0 10px;
     font-size: 0.88rem;
+  }
+  #scanner-container {
+    border-radius: 12px;
+    margin-bottom: 12px;
+  }
+  #reader {
+    min-height: 300px;
+  }
+  #reader video {
+    max-height: 50vh !important;
+  }
+  .scanner-header-bar {
+    top: 6px;
+    left: 6px;
+    right: 6px;
+  }
+  .btn-scanner-tool {
+    padding: 5px 9px;
+    font-size: 0.74rem;
+  }
+  .btn-close-scanner {
+    padding: 5px 10px;
+    font-size: 0.76rem;
+  }
+  .scanner-zoom-bar {
+    bottom: 56px;
+    padding: 4px 8px;
+    gap: 5px;
+  }
+  .btn-zoom {
+    padding: 3px 9px;
+    font-size: 0.72rem;
+  }
+  .guide-main {
+    font-size: 0.78rem;
+  }
+  .guide-sub {
+    font-size: 0.70rem;
   }
 }

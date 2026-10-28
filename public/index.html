@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/css/style.css?v=1.4.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.4.1">
   <!-- Escáner QR / Barcode -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <!-- Lector y Exportador Excel XLSX / CSV -->
@@ -21,7 +21,7 @@
       <span>🏥</span> Calificador de Salud
     </h1>
     <div class="header-badges">
-      <span class="badge-version" id="app-version-badge">v1.4.0</span>
+      <span class="badge-version" id="app-version-badge">v1.4.1</span>
       <span class="badge-contingencia">Enfermedad (Cód. 14)</span>
     </div>
   </header>
@@ -67,15 +67,34 @@
           </span>
         </div>
 
-        <!-- Contenedor del Escáner de Cámara -->
+        <!-- Contenedor del Escáner de Cámara Profesional -->
         <div id="scanner-container">
-          <div class="scanner-overlay">
-            <button type="button" class="btn-torch" id="btn-toggle-torch" style="display: none;">💡 Linterna</button>
-            <button type="button" class="btn-close-scanner" id="btn-stop-camera">✕ Cerrar Cámara</button>
+          <div class="scanner-header-bar">
+            <div class="scanner-left-tools">
+              <button type="button" class="btn-scanner-tool" id="btn-toggle-torch" style="display: none;" title="Encender Linterna">
+                💡 <span class="tool-label">Linterna</span>
+              </button>
+              <button type="button" class="btn-scanner-tool" id="btn-switch-camera" style="display: none;" title="Cambiar Cámara / Lente">
+                🔄 <span class="tool-label" id="camera-label">Cámara</span>
+              </button>
+            </div>
+            <button type="button" class="btn-close-scanner" id="btn-stop-camera">✕ Cerrar</button>
           </div>
+
           <div id="reader"></div>
+
+          <!-- Barra de Zoom y Enfoque Rápido -->
+          <div class="scanner-zoom-bar" id="scanner-zoom-bar" style="display: none;">
+            <span class="zoom-title">🔍 Zoom:</span>
+            <button type="button" class="btn-zoom active" data-zoom="1.0">1x</button>
+            <button type="button" class="btn-zoom" data-zoom="1.5">1.5x</button>
+            <button type="button" class="btn-zoom" data-zoom="2.0">2x</button>
+            <button type="button" class="btn-zoom" data-zoom="3.0">3x</button>
+          </div>
+
           <div class="scanner-guide-text">
-            <span>📐 Mantén la cédula a 15-20 cm y enfoca el código de barras (PDF417)</span>
+            <div class="guide-main">📐 Coloca el <strong>código de barras del reverso</strong> en el visor</div>
+            <div class="guide-sub">Toca <strong>2x</strong> si la cédula se ve lejana • Enfoque continuo activo</div>
           </div>
         </div>
 
@@ -269,9 +288,9 @@
   </main>
 
   <footer class="app-footer">
-    <p>Calificador de Salud IESS / MSP • <strong>Versión 1.4.0</strong></p>
+    <p>Calificador de Salud IESS / MSP • <strong>Versión 1.4.1</strong></p>
   </footer>
 
-  <script src="/js/app.js?v=1.4.0"></script>
+  <script src="/js/app.js?v=1.4.1"></script>
 </body>
 </html>

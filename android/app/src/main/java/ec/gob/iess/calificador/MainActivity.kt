@@ -79,8 +79,8 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
         settings.databaseEnabled = true
         settings.allowFileAccess = true
         settings.allowContentAccess = true
-        settings.useWideViewPort = true
-        settings.loadWithOverviewMode = true
+        settings.useWideViewPort = false
+        settings.loadWithOverviewMode = false
         settings.mediaPlaybackRequiresUserGesture = false
 
         // Bridge para comunicar JavaScript con Android Nativo
@@ -396,7 +396,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
         @JavascriptInterface
         fun getAppVersion(): String {
-            return "1.4.0"
+            return "1.4.1"
         }
 
         @JavascriptInterface
