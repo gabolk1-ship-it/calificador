@@ -480,14 +480,21 @@ window.onNativeNfcDiscovered = function(data) {
     return;
   }
 
-  // CASO 3: Chip detectado pero bloqueado por seguridad criptográfica BAC (Registro Civil ICAO)
+  // CASO 3: Chip detectado pero protegido por seguridad criptográfica BAC (Registro Civil ICAO)
   if (data.requiereDesbloqueoBAC || data.esCedulaElectronica) {
     btnNfc.style.borderColor = 'var(--warning)';
     btnNfc.querySelector('span').textContent = 'Chip Protegido (ICAO)';
     if (window.AndroidBridge && window.AndroidBridge.showToast) {
-      window.AndroidBridge.showToast('Chip seguro: enfoca el código del reverso con la cámara');
+      window.AndroidBridge.showToast('🛡️ Chip seguro: usa la cámara o lector USB');
     }
-    alert('Chip de Cédula detectado vía NFC.\n\nEl chip tiene protección de seguridad nacional (norma ICAO 9303).\n\nPara calificar en 0.2 segundos:\nToca "Escanear Cédula (Cámara)" y enfoca el código de barras del reverso.');
+    
+    if (scannerBanner && scannerBannerText) {
+      scannerBanner.classList.add('flash-success');
+      scannerBannerText.innerHTML = `<strong>🛡️ Chip ICAO Detectado:</strong> Por seguridad nacional no transmite datos al aire. <strong>Usa la Cámara o Lector USB para calificar en 0.2 seg.</strong>`;
+    }
+
+    validationHint.textContent = '💡 Por seguridad del Registro Civil (ICAO 9303), escanea el código del reverso';
+    validationHint.className = 'validation-hint';
     return;
   }
 
