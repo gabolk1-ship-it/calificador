@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/css/style.css?v=1.3.3">
+  <link rel="stylesheet" href="/css/style.css?v=1.4.0">
   <!-- Escáner QR / Barcode -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <!-- Lector y Exportador Excel XLSX / CSV -->
@@ -21,7 +21,7 @@
       <span>🏥</span> Calificador de Salud
     </h1>
     <div class="header-badges">
-      <span class="badge-version" id="app-version-badge">v1.3.0</span>
+      <span class="badge-version" id="app-version-badge">v1.4.0</span>
       <span class="badge-contingencia">Enfermedad (Cód. 14)</span>
     </div>
   </header>
@@ -159,21 +159,29 @@
           <strong>Recomendado para lotes grandes:</strong> Sube directamente tu archivo Excel (<code>.xlsx</code>) o pega las cédulas en el cuadro. El sistema restaura automáticamente el <code>0</code> a la izquierda si Excel lo borró.
         </p>
 
-        <!-- Botón de carga automática directa de C:\DATOSMIS -->
-        <div style="margin-bottom: 14px;">
-          <button type="button" id="btn-load-datosmis" style="width: 100%; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: white; border: none; border-radius: 12px; padding: 14px; font-size: 0.95rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);">
-            <span>⚡ Cargar automáticamente archivo de hoy (desde C:\DATOSMIS)</span>
+        <!-- Selector Universal de Archivo (Desde cualquier carpeta del celular o PC) -->
+        <div style="margin-bottom: 12px;">
+          <input type="file" id="file-input" accept=".xlsx, .xls, .csv, .txt" style="display: none;">
+          <button type="button" id="btn-pick-file" style="width: 100%; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; border-radius: 12px; padding: 15px; font-size: 0.95rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 3px 10px rgba(2, 132, 199, 0.25);">
+            <svg style="width: 22px; height: 22px; fill: currentColor;" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+            <span>📁 Seleccionar Archivo (Excel, CSV o TXT)</span>
           </button>
+          <div id="file-selected-name" style="margin-top: 6px; font-size: 0.82rem; color: var(--success); text-align: center; font-weight: 600;"></div>
         </div>
 
-        <!-- Dropzone de Archivo -->
-        <div class="dropzone" id="dropzone">
-          <input type="file" id="file-input" accept=".xlsx, .xls, .csv, .txt" style="display: none;">
-          <svg viewBox="0 0 24 24" class="dropzone-icon"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm1 7V3.5L18.5 7H15zM4 20V4h9v5h5v11H4z"/></svg>
-          <p style="font-weight: 700; color: var(--primary-dark); margin-bottom: 4px; font-size: 0.95rem;">
-            📁 Clic aquí para seleccionar tu archivo Excel (.xlsx / .csv)
+        <!-- Zona de arrastre para PC / laptop -->
+        <div class="dropzone" id="dropzone" style="margin-bottom: 12px;">
+          <p style="font-weight: 600; color: var(--slate-700); font-size: 0.88rem;">
+            O arrastra tu archivo aquí
           </p>
-          <span style="font-size: 0.8rem; color: var(--slate-600);">O arrastra el archivo directamente sobre esta zona</span>
+          <span style="font-size: 0.78rem; color: var(--slate-600);">(Desde Descargas, Documentos, Drive o USB)</span>
+        </div>
+
+        <!-- Acceso directo exclusivo para red local hospitalaria -->
+        <div style="margin-bottom: 14px;">
+          <button type="button" id="btn-load-datosmis" style="background: transparent; color: #059669; border: 1px dashed #10b981; border-radius: 10px; padding: 9px 12px; font-size: 0.80rem; font-weight: 600; cursor: pointer; width: 100%;">
+            ⚡ Acceso directo local: Cargar desde C:\DATOSMIS (solo intranet)
+          </button>
         </div>
 
         <!-- O pegar lista manual -->
@@ -261,9 +269,9 @@
   </main>
 
   <footer class="app-footer">
-    <p>Calificador de Salud IESS / MSP • <strong>Versión 1.3.0</strong></p>
+    <p>Calificador de Salud IESS / MSP • <strong>Versión 1.4.0</strong></p>
   </footer>
 
-  <script src="/js/app.js?v=1.3.3"></script>
+  <script src="/js/app.js?v=1.4.0"></script>
 </body>
 </html>

@@ -9,6 +9,7 @@ import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.IsoDep
 import android.nfc.tech.Ndef
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
@@ -25,13 +26,28 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
     private lateinit var webView: WebView
     private var nfcAdapter: NfcAdapter? = null
+    private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
 
-    // Solicitud de permisos en tiempo de ejecuci?n (C?mara)
+    // Selector de archivos nativo para Carga Masiva (Excel, CSV, TXT desde cualquier carpeta)
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val data = result.data
+            val uris = WebChromeClient.FileChooserParams.parseResult(result.resultCode, data)
+            fileUploadCallback?.onReceiveValue(uris)
+        } else {
+            fileUploadCallback?.onReceiveValue(null)
+        }
+        fileUploadCallback = null
+    }
+
+    // Solicitud de permisos en tiempo de ejecución (Cámara)
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (!isGranted) {
-            Toast.makeText(this, "Permiso de c?mara necesario para escaneo ?ptico", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Permiso de cámara necesario para escaneo óptico", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -78,8 +94,30 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest?) {
-                // Otorgar permiso de c?mara para el esc?ner web en tiempo real
+                // Otorgar permiso de cámara para el escáner web en tiempo real
                 request?.grant(request.resources)
+            }
+
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                fileUploadCallback?.onReceiveValue(null)
+                fileUploadCallback = filePathCallback
+
+                val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                    type = "*/*"
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                }
+                try {
+                    fileChooserLauncher.launch(intent)
+                } catch (e: Exception) {
+                    fileUploadCallback?.onReceiveValue(null)
+                    fileUploadCallback = null
+                    return false
+                }
+                return true
             }
         }
     }
@@ -358,7 +396,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
         @JavascriptInterface
         fun getAppVersion(): String {
-            return "1.3.0"
+            return "1.4.0"
         }
 
         @JavascriptInterface

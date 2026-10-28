@@ -685,6 +685,13 @@ btnNuevaConsulta.addEventListener('click', () => {
 // 5. MODO MASIVO (SOPORTE DE 4000+ CÉDULAS)
 // ==========================================
 
+const btnPickFile = document.getElementById('btn-pick-file');
+const fileSelectedName = document.getElementById('file-selected-name');
+
+if (btnPickFile) {
+  btnPickFile.addEventListener('click', () => fileInput.click());
+}
+
 dropzone.addEventListener('click', () => fileInput.click());
 
 ['dragenter', 'dragover'].forEach(eventName => {
@@ -705,13 +712,17 @@ dropzone.addEventListener('drop', (e) => {
   const dt = e.dataTransfer;
   const files = dt.files;
   if (files && files.length > 0) {
-    procesarArchivoSeleccionado(files[0]);
+    const f = files[0];
+    if (fileSelectedName) fileSelectedName.textContent = `✓ Seleccionado: ${f.name} (${Math.round(f.size/1024)} KB)`;
+    procesarArchivoSeleccionado(f);
   }
 });
 
 fileInput.addEventListener('change', (e) => {
   if (e.target.files && e.target.files.length > 0) {
-    procesarArchivoSeleccionado(e.target.files[0]);
+    const f = e.target.files[0];
+    if (fileSelectedName) fileSelectedName.textContent = `✓ Seleccionado: ${f.name} (${Math.round(f.size/1024)} KB)`;
+    procesarArchivoSeleccionado(f);
   }
 });
 
