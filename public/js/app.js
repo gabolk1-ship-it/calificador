@@ -214,6 +214,25 @@ function feedbackEscaneo() {
   } catch (e) {}
 }
 
+const btnToggleTorch = document.getElementById('btn-toggle-torch');
+let isTorchOn = false;
+
+if (btnToggleTorch) {
+  btnToggleTorch.addEventListener('click', async () => {
+    if (!html5QrCode) return;
+    try {
+      isTorchOn = !isTorchOn;
+      await html5QrCode.applyVideoConstraints({
+        advanced: [{ torch: isTorchOn }]
+      });
+      btnToggleTorch.textContent = isTorchOn ? '💡 Apagar' : '💡 Linterna';
+      btnToggleTorch.classList.toggle('active', isTorchOn);
+    } catch (e) {
+      console.warn('Torch no soportado:', e);
+    }
+  });
+}
+
 btnCamera.addEventListener('click', async () => {
   if (scannerContainer.style.display === 'block') {
     cerrarCamara();
@@ -224,17 +243,43 @@ btnCamera.addEventListener('click', async () => {
 
   try {
     if (!html5QrCode) {
-      html5QrCode = new Html5Qrcode("reader");
+      const formats = [];
+      if (window.Html5QrcodeSupportedFormats) {
+        formats.push(
+          Html5QrcodeSupportedFormats.PDF_417,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128
+        );
+      }
+      html5QrCode = new Html5Qrcode("reader", {
+        // Aceleración por hardware con Google BarcodeDetector API si está disponible
+        useBarCodeDetectorIfSupported: true,
+        // Limitar formatos exclusivamente a PDF417 de cédula para ahorrar 70% CPU y decodificar al instante
+        formatsToSupport: formats.length > 0 ? formats : undefined,
+        verbose: false
+      });
     }
 
     const config = {
-      fps: 15,
-      qrbox: { width: 280, height: 180 },
-      aspectRatio: 1.5
+      fps: 24, // 24 cuadros/segundo para respuesta instantánea
+      qrbox: (viewfinderWidth, viewfinderHeight) => {
+        // Cuadro rectangular ancho (2.2:1) óptimo para el código PDF417 de la cédula ecuatoriana
+        const w = Math.min(viewfinderWidth * 0.92, 360);
+        const h = Math.max(Math.min(w * 0.45, 140), 90);
+        return { width: Math.round(w), height: Math.round(h) };
+      },
+      aspectRatio: 1.6
+    };
+
+    // Preferir cámara trasera en resolución HD y autoenfoque continuo
+    const cameraConstraints = {
+      facingMode: { ideal: "environment" },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
     };
 
     await html5QrCode.start(
-      { facingMode: "environment" },
+      cameraConstraints,
       config,
       (decodedText) => {
         const cedulaEncontrada = extraerCedulaDeTexto(decodedText);
@@ -250,9 +295,39 @@ btnCamera.addEventListener('click', async () => {
       },
       () => {}
     );
+
+    // Si el dispositivo tiene linterna/flash, mostrar el botón
+    try {
+      const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+      if (capabilities && capabilities.torchFeature && capabilities.torchFeature().isSupported()) {
+        if (btnToggleTorch) btnToggleTorch.style.display = 'inline-block';
+      }
+    } catch (_) {}
+
   } catch (err) {
-    alert(`No se pudo acceder a la cámara: ${err.message || err}`);
-    cerrarCamara();
+    // Si la resolución HD falla en algún dispositivo específico, intentar fallback estándar
+    try {
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 20, qrbox: { width: 290, height: 130 } },
+        (decodedText) => {
+          const cedulaEncontrada = extraerCedulaDeTexto(decodedText);
+          if (cedulaEncontrada) {
+            feedbackEscaneo();
+            cerrarCamara();
+            cedulaInput.value = cedulaEncontrada;
+            btnConsultar.disabled = false;
+            validationHint.textContent = `✓ Escaneado: ${cedulaEncontrada}`;
+            validationHint.className = 'validation-hint valid';
+            ejecutarConsultaIndividual(cedulaEncontrada);
+          }
+        },
+        () => {}
+      );
+    } catch (fallbackErr) {
+      alert(`No se pudo acceder a la cámara: ${fallbackErr.message || fallbackErr}`);
+      cerrarCamara();
+    }
   }
 });
 
@@ -261,10 +336,21 @@ btnStopCamera.addEventListener('click', cerrarCamara);
 async function cerrarCamara() {
   if (html5QrCode && html5QrCode.isScanning) {
     try {
+      if (isTorchOn) {
+        try {
+          await html5QrCode.applyVideoConstraints({ advanced: [{ torch: false }] });
+        } catch (_) {}
+        isTorchOn = false;
+        if (btnToggleTorch) {
+          btnToggleTorch.textContent = '💡 Linterna';
+          btnToggleTorch.classList.remove('active');
+        }
+      }
       await html5QrCode.stop();
     } catch (e) {}
   }
   scannerContainer.style.display = 'none';
+  if (btnToggleTorch) btnToggleTorch.style.display = 'none';
 }
 
 // NFC

@@ -261,6 +261,26 @@ body {
   top: 12px;
   right: 12px;
   z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+
+.btn-torch {
+  background: rgba(0, 0, 0, 0.75);
+  color: #fef08a;
+  border: 1px solid rgba(254, 240, 138, 0.4);
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-torch.active {
+  background: #facc15;
+  color: #713f12;
+  border-color: #eab308;
 }
 
 .btn-close-scanner {
@@ -271,6 +291,15 @@ body {
   border-radius: 20px;
   font-size: 0.85rem;
   cursor: pointer;
+}
+
+.scanner-guide-text {
+  background: rgba(15, 23, 42, 0.85);
+  color: #f8fafc;
+  font-size: 0.78rem;
+  padding: 8px 12px;
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Input Manual */
