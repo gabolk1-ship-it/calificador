@@ -256,21 +256,17 @@ body {
 
 #reader {
   width: 100% !important;
-  min-height: 280px;
   position: relative;
   background: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 #reader video {
   width: 100% !important;
-  height: 100% !important;
-  max-height: 55vh !important;
-  object-fit: cover !important;
-  border-radius: 10px !important;
+  height: auto !important;
   display: block !important;
+  border-radius: 10px !important;
 }
 
 #reader canvas {
@@ -278,9 +274,6 @@ body {
 }
 
 #reader__scan_region {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
   width: 100% !important;
 }
 

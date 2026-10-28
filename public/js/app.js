@@ -254,13 +254,16 @@ if (btnToggleTorch) {
 async function setCameraZoom(zoomLevel) {
   if (!html5QrCode) return;
   try {
-    await html5QrCode.applyVideoConstraints({
-      advanced: [{ zoom: zoomLevel }]
-    });
-    zoomButtons.forEach(btn => {
-      const z = parseFloat(btn.dataset.zoom);
-      btn.classList.toggle('active', Math.abs(z - zoomLevel) < 0.1);
-    });
+    const track = html5QrCode.getRunningTrack();
+    if (track && track.applyConstraints) {
+      await track.applyConstraints({
+        advanced: [{ zoom: zoomLevel }]
+      });
+      zoomButtons.forEach(btn => {
+        const z = parseFloat(btn.dataset.zoom);
+        btn.classList.toggle('active', Math.abs(z - zoomLevel) < 0.1);
+      });
+    }
   } catch (e) {
     console.warn('Zoom no soportado:', e);
   }
@@ -273,19 +276,13 @@ zoomButtons.forEach(btn => {
   });
 });
 
-// Control de Cambio de Cámara / Lente (Lente 1x vs 2x vs Gran Angular)
+// Control de Cambio de Cámara / Lente
 if (btnSwitchCamera) {
   btnSwitchCamera.addEventListener('click', async () => {
     if (isCameraBusy || availableCameras.length <= 1) return;
     currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
-    await reiniciarCamaraConIndice(currentCameraIndex);
+    await iniciarEscaneoCamara(availableCameras[currentCameraIndex].id);
   });
-}
-
-async function reiniciarCamaraConIndice(index) {
-  await cerrarCamaraSilencioso();
-  scannerContainer.style.display = 'block';
-  await iniciarEscaneoConDispositivo(availableCameras[index]);
 }
 
 async function cerrarCamaraSilencioso() {
@@ -329,53 +326,45 @@ async function cerrarCamara() {
   }
 }
 
-async function iniciarEscaneoConDispositivo(cameraDevice) {
+async function iniciarEscaneoCamara(cameraId = null) {
+  if (isCameraBusy) return;
   isCameraBusy = true;
+
   try {
+    // 1. Limpiar completamente cualquier instancia previa
+    await cerrarCamaraSilencioso();
+
+    // 2. Mostrar contenedor
+    scannerContainer.style.display = 'block';
+
+    // 3. Formatos soportados (PDF417 de cédula nueva, Code 39/128 de cédula tradicional, QR)
     const formats = [];
     if (window.Html5QrcodeSupportedFormats) {
       formats.push(
         Html5QrcodeSupportedFormats.PDF_417,
         Html5QrcodeSupportedFormats.CODE_128,
         Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.QR_CODE,
-        Html5QrcodeSupportedFormats.DATA_MATRIX
+        Html5QrcodeSupportedFormats.QR_CODE
       );
     }
 
-    // useBarCodeDetectorIfSupported: FALSE para forzar ZXing nativo en JS, que decodifica PDF417 denso sin fallar
+    // Instancia limpia con ZXing nativo en JS
     html5QrCode = new Html5Qrcode("reader", {
       useBarCodeDetectorIfSupported: false,
       formatsToSupport: formats.length > 0 ? formats : undefined,
       verbose: false
     });
 
-    const isMobilePortrait = window.innerWidth <= 600 && window.innerHeight > window.innerWidth;
+    const isMobile = window.innerWidth <= 600;
 
-    // Configuración visual que aprovecha el alto de la pantalla del celular sin recortar en franja
     const config = {
-      fps: 22,
+      fps: 20,
       qrbox: (viewfinderWidth, viewfinderHeight) => {
-        const w = Math.round(viewfinderWidth * 0.88);
-        const h = Math.round(Math.min(viewfinderHeight * 0.65, Math.max(w * 0.55, 180)));
-        return { width: Math.max(w, 240), height: Math.max(h, 160) };
+        const w = Math.round(Math.min(viewfinderWidth * 0.90, 360));
+        const h = Math.round(Math.min(viewfinderHeight * 0.70, 240));
+        return { width: Math.max(w, 240), height: Math.max(h, 150) };
       },
-      aspectRatio: isMobilePortrait ? 1.0 : 1.35
-    };
-
-    const targetCameraId = cameraDevice ? cameraDevice.id : null;
-
-    // Preferir resolución HD y autoenfoque continuo para nitidez en códigos densos
-    const primaryConstraints = targetCameraId ? {
-      deviceId: { exact: targetCameraId },
-      width: { ideal: 1920, min: 1280 },
-      height: { ideal: 1080, min: 720 },
-      advanced: [{ focusMode: "continuous" }]
-    } : {
-      facingMode: "environment",
-      width: { ideal: 1920, min: 1280 },
-      height: { ideal: 1080, min: 720 },
-      advanced: [{ focusMode: "continuous" }]
+      aspectRatio: isMobile ? 1.2 : 1.5
     };
 
     const onDecoded = (decodedText) => {
@@ -391,17 +380,42 @@ async function iniciarEscaneoConDispositivo(cameraDevice) {
       }
     };
 
+    // Fuente de cámara: cameraId como string si existe, o { facingMode: "environment" } universal
+    const cameraSource = cameraId ? cameraId : { facingMode: "environment" };
+
+    await html5QrCode.start(cameraSource, config, onDecoded, () => {});
+
+    // Una vez que la cámara ya está corriendo exitosamente:
+    // A) Aplicar enfoque y zoom de manera segura
     try {
-      await html5QrCode.start(primaryConstraints, config, onDecoded, () => {});
-    } catch (hdErr) {
-      console.warn("Fallo de resolución HD, intentando fallback:", hdErr);
-      const fallbackConstraints = targetCameraId 
-        ? { deviceId: { exact: targetCameraId } } 
-        : { facingMode: "environment" };
-      await html5QrCode.start(fallbackConstraints, config, onDecoded, () => {});
+      const track = html5QrCode.getRunningTrack();
+      if (track) {
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+
+        // Autoenfoque continuo si está disponible
+        if (caps.focusMode && caps.focusMode.includes('continuous')) {
+          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+        }
+
+        // Barra de zoom si el teléfono lo soporta
+        if (caps.zoom) {
+          if (scannerZoomBar) scannerZoomBar.style.display = 'flex';
+          zoomButtons.forEach(btn => {
+            const z = parseFloat(btn.dataset.zoom);
+            btn.style.display = (z <= (caps.zoom.max || 8)) ? 'inline-block' : 'none';
+          });
+          // Auto-zoom a 1.5x o 2x para acercar la imagen sin que se vea lejana
+          const defaultZoom = Math.min(2.0, caps.zoom.max || 1.0);
+          if (defaultZoom >= 1.5) {
+            setCameraZoom(defaultZoom);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("No se pudo configurar zoom/enfoque:", e);
     }
 
-    // Configurar linterna si el teléfono la soporta
+    // B) Linterna si el teléfono la soporta
     try {
       const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
       if (capabilities && capabilities.torchFeature && capabilities.torchFeature().isSupported()) {
@@ -409,22 +423,25 @@ async function iniciarEscaneoConDispositivo(cameraDevice) {
       }
     } catch (_) {}
 
-    // Configurar barra de zoom óptico/digital si el hardware lo soporta
+    // C) Enumerar cámaras secundarias para el botón de cambio de lente
     try {
-      const mediaTrack = html5QrCode.getRunningTrack();
-      if (mediaTrack && mediaTrack.getCapabilities) {
-        const caps = mediaTrack.getCapabilities();
-        if (caps.zoom) {
-          if (scannerZoomBar) scannerZoomBar.style.display = 'flex';
-          zoomButtons.forEach(btn => {
-            const z = parseFloat(btn.dataset.zoom);
-            btn.style.display = (z <= (caps.zoom.max || 8)) ? 'inline-block' : 'none';
-          });
+      const devices = await Html5Qrcode.getCameras();
+      if (devices && devices.length > 1) {
+        const rear = devices.filter(d => 
+          /back|rear|trasera|environment|0\b/i.test(d.label) || 
+          !/front|delantera|selfie|user/i.test(d.label)
+        );
+        availableCameras = rear.length > 1 ? rear : devices;
+        if (availableCameras.length > 1 && btnSwitchCamera) {
+          btnSwitchCamera.style.display = 'inline-flex';
+          if (cameraLabel) {
+            cameraLabel.textContent = `Lente ${currentCameraIndex + 1}/${availableCameras.length}`;
+          }
         }
       }
     } catch (_) {}
 
-    // OCR / TextDetector si el navegador lo soporta (reconocimiento del número de cédula escrito)
+    // D) Detección de texto OCR para leer los 10 dígitos al frente
     if ('TextDetector' in window) {
       try {
         const textDetector = new TextDetector();
@@ -442,16 +459,8 @@ async function iniciarEscaneoConDispositivo(cameraDevice) {
               }
             }
           } catch (_) {}
-        }, 320);
+        }, 350);
       } catch (_) {}
-    }
-
-    // Mostrar botón de cambio de cámara si hay más de un lente trasero disponible
-    if (availableCameras.length > 1 && btnSwitchCamera) {
-      btnSwitchCamera.style.display = 'inline-flex';
-      if (cameraLabel) {
-        cameraLabel.textContent = `Lente ${currentCameraIndex + 1}/${availableCameras.length}`;
-      }
     }
 
   } catch (err) {
@@ -462,7 +471,7 @@ async function iniciarEscaneoConDispositivo(cameraDevice) {
     const msg = (err && (err.message || String(err))) || '';
     if (msg.includes('NotAllowedError') || msg.includes('Permission')) {
       alert('Permiso de cámara no concedido.\nActiva el permiso de cámara en la app o navegador para escanear.');
-    } else if (!msg.includes('already under transition')) {
+    } else {
       alert(`No se pudo acceder a la cámara: ${msg}`);
     }
   } finally {
@@ -471,38 +480,11 @@ async function iniciarEscaneoConDispositivo(cameraDevice) {
 }
 
 btnCamera.addEventListener('click', async () => {
-  if (isCameraBusy) return;
-
   if (scannerContainer.style.display === 'block') {
     await cerrarCamara();
     return;
   }
-
-  isCameraBusy = true;
-  scannerContainer.style.display = 'block';
-
-  try {
-    // Enumerar cámaras del dispositivo para seleccionar prioritariamente el sensor trasero principal (1x)
-    try {
-      const devices = await Html5Qrcode.getCameras();
-      if (devices && devices.length > 0) {
-        const rear = devices.filter(d => 
-          /back|rear|trasera|environment|0\b/i.test(d.label) || 
-          !/front|delantera|selfie|user/i.test(d.label)
-        );
-        availableCameras = rear.length > 0 ? rear : devices;
-      }
-    } catch (e) {
-      console.warn("No se pudo enumerar cámaras:", e);
-      availableCameras = [];
-    }
-
-    currentCameraIndex = 0;
-    const selectedCam = availableCameras.length > 0 ? availableCameras[0] : null;
-    await iniciarEscaneoConDispositivo(selectedCam);
-  } finally {
-    isCameraBusy = false;
-  }
+  await iniciarEscaneoCamara();
 });
 
 btnStopCamera.addEventListener('click', cerrarCamara);

@@ -41,10 +41,11 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v1.4.1-apk
-        name: "Calificador Android v1.4.1 (APK)"
+        tag_name: v1.4.2-apk
+        name: "Calificador Android v1.4.2 (APK)"
         body: |
-          ### Calificador de Derecho a Salud (IESS / MSP) - Android APK v1.4.1
+          ### Calificador de Derecho a Salud (IESS / MSP) - Android APK v1.4.2
+          - Corrección definitiva de apertura de cámara: arranque universal con constraints nativas para evitar cierres inmediatos.
           - Escáner óptico optimizado para celulares: autoenfoque continuo HD, controles de zoom rápido (1x, 1.5x, 2x, 3x) y selector de lentes traseros (evita apertura en gran angular lejano).
           - Decodificación robusta para códigos PDF417 de alta densidad y códigos Code 39 / Code 128 de cédulas tradicionales.
           - Adaptación nativa al viewport móvil en WebView y diseño de cámara responsivo sin franjas reducidas.
