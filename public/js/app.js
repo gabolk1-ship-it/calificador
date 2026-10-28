@@ -328,23 +328,63 @@ btnNfc.addEventListener('click', async () => {
 // Integración con Android Nativo (Bridge)
 if (window.AndroidBridge) {
   btnNfc.querySelector('span').textContent = 'NFC Nativo Activo';
+  if (window.AndroidBridge.getAppVersion) {
+    const vBadge = document.getElementById('app-version-badge');
+    const fVersion = document.getElementById('footer-version');
+    const nativeV = window.AndroidBridge.getAppVersion();
+    if (vBadge) vBadge.textContent = 'v' + nativeV;
+    if (fVersion) fVersion.textContent = nativeV;
+  }
 }
 
 window.onNativeNfcDiscovered = function(data) {
   feedbackEscaneo();
-  if (window.AndroidBridge && window.AndroidBridge.showToast) {
-    window.AndroidBridge.showToast('¡Cédula detectada por NFC!');
-  }
-  btnNfc.style.borderColor = 'var(--success)';
-  btnNfc.querySelector('span').textContent = 'Cédula Detectada';
 
+  // CASO 1: El chip entregó el número de cédula (DG1 o lectura directa)
+  if (data.cedula && validarCedulaCliente(data.cedula)) {
+    if (window.AndroidBridge && window.AndroidBridge.showToast) {
+      window.AndroidBridge.showToast('Cédula leída por NFC: ' + data.cedula);
+    }
+    btnNfc.style.borderColor = 'var(--success)';
+    btnNfc.querySelector('span').textContent = 'Cédula: ' + data.cedula;
+
+    // Escribir el número en el campo de texto
+    cedulaInput.value = data.cedula;
+
+    // Arrancar inmediatamente la calificación del paciente
+    ejecutarConsultaIndividual(data.cedula);
+    return;
+  }
+
+  // CASO 2: Si el input ya tenía cédula y se acerca la tarjeta
   if (cedulaInput.value && validarCedulaCliente(cedulaInput.value)) {
+    if (window.AndroidBridge && window.AndroidBridge.showToast) {
+      window.AndroidBridge.showToast('Calificando paciente...');
+    }
+    btnNfc.style.borderColor = 'var(--success)';
+    btnNfc.querySelector('span').textContent = 'Consultando...';
     ejecutarConsultaIndividual(cedulaInput.value);
-  } else {
-    setTimeout(() => {
-      btnNfc.style.borderColor = 'var(--primary)';
-      btnNfc.querySelector('span').textContent = window.AndroidBridge ? 'NFC Nativo Activo' : 'Acercar Cédula (NFC)';
-    }, 3000);
+    return;
+  }
+
+  // CASO 3: Chip detectado pero bloqueado por seguridad criptográfica BAC (Registro Civil ICAO)
+  if (data.requiereDesbloqueoBAC || data.esCedulaElectronica) {
+    btnNfc.style.borderColor = 'var(--warning)';
+    btnNfc.querySelector('span').textContent = 'Chip Protegido (ICAO)';
+    if (window.AndroidBridge && window.AndroidBridge.showToast) {
+      window.AndroidBridge.showToast('Chip seguro: enfoca el código del reverso con la cámara');
+    }
+    alert('Chip de Cédula detectado vía NFC.\n\nEl chip tiene protección de seguridad nacional (norma ICAO 9303).\n\nPara calificar en 0.2 segundos:\nToca "Escanear Cédula (Cámara)" y enfoca el código de barras del reverso.');
+    return;
+  }
+
+  // CASO 4: Tarjeta NFC genérica o serial detectado
+  if (data.serialHex) {
+    btnNfc.style.borderColor = 'var(--warning)';
+    btnNfc.querySelector('span').textContent = 'Tag NFC: ' + data.serialHex.substring(0, 8);
+    if (window.AndroidBridge && window.AndroidBridge.showToast) {
+      window.AndroidBridge.showToast('NFC detectado (' + data.serialHex.substring(0, 8) + ')');
+    }
   }
 };
 

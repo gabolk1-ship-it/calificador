@@ -41,8 +41,8 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v1.1.0-apk
-        name: "Calificador Android v1.1.0 (APK)"
+        tag_name: v1.2.0-apk
+        name: "Calificador Android v1.2.0 (APK)"
         body: |
           ### Calificador de Derecho a Salud (IESS / MSP) - Android APK
           - Lectura nativa de C?dula Electr?nica por **NFC** (ISO-DEP / ICAO 9303).
