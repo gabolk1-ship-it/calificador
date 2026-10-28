@@ -8,3 +8,5 @@ submitXml_debug.xml
 test_altcha.mjs
 patch.js
 4000_cedulas_test.txt
+
+*.zip

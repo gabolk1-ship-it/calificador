@@ -21,7 +21,7 @@
       <span>🏥</span> Calificador de Salud
     </h1>
     <div class="header-badges">
-      <span class="badge-version" id="app-version-badge">v1.2.0</span>
+      <span class="badge-version" id="app-version-badge">v1.3.0</span>
       <span class="badge-contingencia">Enfermedad (Cód. 14)</span>
     </div>
   </header>
@@ -45,13 +45,26 @@
         <div class="capture-grid">
           <button type="button" class="btn-capture" id="btn-camera">
             <svg viewBox="0 0 24 24"><path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 15a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0-2a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/></svg>
-            <span>Escanear Cédula (Cámara)</span>
+            <span>Escanear Cámara</span>
           </button>
 
           <button type="button" class="btn-capture" id="btn-nfc">
             <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 18H4V4h16v16zM18 6h-5c-1.1 0-2 .9-2 2v2.28c-.6.35-1 .98-1 1.72 0 1.1.9 2 2 2s2-.9 2-2c0-.74-.4-1.37-1-1.72V8h5v10H6v-5h2v3h8V6z"/></svg>
-            <span>Acercar Cédula (NFC)</span>
+            <span>Chip NFC</span>
           </button>
+
+          <button type="button" class="btn-capture active-scanner" id="btn-usb-scanner" title="Lector USB / Bluetooth conectado y listo">
+            <svg viewBox="0 0 24 24"><path d="M2 4h2v16H2V4zm4 0h1v16H6V4zm3 0h2v16H9V4zm4 0h1v16h-1V4zm3 0h2v16h-2V4zm4 0h2v16h-2V4zM1 11h22v2H1v-2z"/></svg>
+            <span>Lector USB / Pistola</span>
+          </button>
+        </div>
+
+        <!-- Banner de Estado Lector Externo USB / Bluetooth -->
+        <div class="scanner-banner" id="scanner-banner">
+          <span class="scanner-dot"></span>
+          <span class="scanner-banner-text" id="scanner-banner-text">
+            <strong>Lector Externo Activo:</strong> Dispara al código de barras (PDF417) en cualquier momento.
+          </span>
         </div>
 
         <!-- Contenedor del Escáner de Cámara -->
@@ -244,7 +257,7 @@
   </main>
 
   <footer class="app-footer">
-    <p>Calificador de Salud IESS / MSP • <strong>Versión 1.2.0</strong></p>
+    <p>Calificador de Salud IESS / MSP • <strong>Versión 1.3.0</strong></p>
   </footer>
 
   <script src="/js/app.js"></script>

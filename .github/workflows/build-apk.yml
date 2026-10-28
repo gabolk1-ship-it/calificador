@@ -41,13 +41,14 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v1.2.0-apk
-        name: "Calificador Android v1.2.0 (APK)"
+        tag_name: v1.3.0-apk
+        name: "Calificador Android v1.3.0 (APK)"
         body: |
-          ### Calificador de Derecho a Salud (IESS / MSP) - Android APK
-          - Lectura nativa de C?dula Electr?nica por **NFC** (ISO-DEP / ICAO 9303).
-          - Esc?ner ?ptico integrado con c?mara (PDF417 / QR).
-          - Consulta instant?nea y unificada de derechos.
+          ### Calificador de Derecho a Salud (IESS / MSP) - Android APK v1.3.0
+          - Soporte de Lector Externo de Código de Barras (USB / Bluetooth / Pistola) para Web y PC.
+          - Lectura nativa de Cédula Electrónica por **NFC** (ISO-DEP / ICAO 9303).
+          - Escáner óptico integrado con cámara (PDF417 / QR).
+          - Consulta instantánea y unificada de contingencia Enfermedad (Cód. 14).
         files: android/app/build/outputs/apk/debug/*.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

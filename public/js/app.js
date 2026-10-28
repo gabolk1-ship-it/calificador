@@ -19,6 +19,9 @@ const btnConsultar = document.getElementById('btn-consultar');
 const validationHint = document.getElementById('validation-hint');
 const btnCamera = document.getElementById('btn-camera');
 const btnNfc = document.getElementById('btn-nfc');
+const btnUsbScanner = document.getElementById('btn-usb-scanner');
+const scannerBanner = document.getElementById('scanner-banner');
+const scannerBannerText = document.getElementById('scanner-banner-text');
 const btnStopCamera = document.getElementById('btn-stop-camera');
 const scannerContainer = document.getElementById('scanner-container');
 const loader = document.getElementById('loader');
@@ -324,6 +327,116 @@ btnNfc.addEventListener('click', async () => {
     }
   }
 });
+
+// ==========================================
+// 3.1. LECTOR DE CÓDIGO DE BARRAS EXTERNO (USB / BLUETOOTH / WEDGE)
+// Compatible con computadoras, laptops y lectores tipo pistola
+// ==========================================
+let scannerBuffer = '';
+let lastKeyTime = 0;
+let scannerTimer = null;
+
+function procesarBufferEscaneado(texto) {
+  if (!texto) return false;
+  const cedula = extraerCedulaDeTexto(texto);
+  if (cedula && validarCedulaCliente(cedula)) {
+    feedbackEscaneo();
+    cedulaInput.value = cedula;
+    btnConsultar.disabled = false;
+    validationHint.textContent = `✓ Escaneado por Lector: ${cedula}`;
+    validationHint.className = 'validation-hint valid';
+
+    if (scannerBanner) {
+      scannerBanner.classList.add('flash-success');
+      if (scannerBannerText) {
+        scannerBannerText.innerHTML = `<strong>¡Cédula Escaneada (${cedula})!</strong> Calificando paciente...`;
+      }
+      setTimeout(() => {
+        scannerBanner.classList.remove('flash-success');
+        if (scannerBannerText) {
+          scannerBannerText.innerHTML = `<strong>Lector Externo Activo:</strong> Dispara al código de barras (PDF417) en cualquier momento.`;
+        }
+      }, 3500);
+    }
+
+    ejecutarConsultaIndividual(cedula);
+    return true;
+  }
+  return false;
+}
+
+if (btnUsbScanner) {
+  btnUsbScanner.addEventListener('click', () => {
+    feedbackEscaneo();
+    cedulaInput.focus();
+    if (scannerBanner) {
+      scannerBanner.classList.add('flash-success');
+      if (scannerBannerText) {
+        scannerBannerText.innerHTML = `<strong>Lector Listo:</strong> Apunta la pistola o lector al código de barras de la cédula...`;
+      }
+      setTimeout(() => {
+        scannerBanner.classList.remove('flash-success');
+        if (scannerBannerText) {
+          scannerBannerText.innerHTML = `<strong>Lector Externo Activo:</strong> Dispara al código de barras (PDF417) en cualquier momento.`;
+        }
+      }, 3000);
+    }
+  });
+}
+
+// Escucha global de teclado (Keyboard Wedge) para lectores de códigos de barras USB / Bluetooth
+window.addEventListener('keydown', (e) => {
+  // Si el usuario está trabajando en el cuadro de texto masivo, no interferir
+  if (document.activeElement === bulkTextarea) {
+    return;
+  }
+
+  const currentTime = Date.now();
+  const timeDiff = currentTime - lastKeyTime;
+  lastKeyTime = currentTime;
+
+  // Si pasa más de 120ms entre teclas, se reinicia el buffer (a menos que sea Enter)
+  if (timeDiff > 120) {
+    scannerBuffer = '';
+  }
+
+  if (e.key === 'Enter') {
+    // Si viene de un lector de barras o el buffer acumuló datos
+    if (scannerBuffer.length >= 8) {
+      const exitoso = procesarBufferEscaneado(scannerBuffer);
+      if (exitoso) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      scannerBuffer = '';
+      return;
+    }
+    // Si el foco estaba en cedulaInput y se presionó Enter
+    if (document.activeElement === cedulaInput && cedulaInput.value) {
+      const exitoso = procesarBufferEscaneado(cedulaInput.value);
+      if (exitoso) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+    scannerBuffer = '';
+    return;
+  }
+
+  // Teclas imprimibles (alfanuméricas y caracteres estándar)
+  if (e.key.length === 1) {
+    scannerBuffer += e.key;
+
+    // Timeout de seguridad por si la pistola lectora no envía Enter al final
+    clearTimeout(scannerTimer);
+    scannerTimer = setTimeout(() => {
+      if (scannerBuffer.length >= 9) {
+        procesarBufferEscaneado(scannerBuffer);
+      }
+      scannerBuffer = '';
+    }, 100);
+  }
+}, true);
 
 // Integración con Android Nativo (Bridge)
 if (window.AndroidBridge) {
