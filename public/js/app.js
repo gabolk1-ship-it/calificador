@@ -999,18 +999,26 @@ function clasificarTipoSeguroCliente(tipoAfiliacion = '', observacion = '', acre
   const obs = String(observacion || '').trim();
   const combo = `${afil} ${obs}`.toUpperCase();
 
-  if (!acreditado) {
+  // 1. SIN COBERTURA
+  if (!acreditado || /SIN COBERTURA|NO CALIFICA|FUERA DEL TIEMPO|NO TIENE DERECHO|NO ACREDITADO/i.test(combo)) {
     return {
       codigo: 'SIN_COBERTURA',
-      nombre: 'SIN COBERTURA ACTIVA',
+      nombre: obs ? `SIN COBERTURA (${obs})` : 'SIN COBERTURA ACTIVA',
       subsistema: 'NO ACREDITADO',
       badgeClass: 'badge-seguro invalido'
     };
   }
 
-  // 1. SEGURO SOCIAL CAMPESINO (SSC)
-  const esCampesino = /CAMPESINO|SSC/i.test(combo);
-  if (esCampesino) {
+  // 2. SEGURO SOCIAL CAMPESINO (SSC)
+  if (/CAMPESINO|SSC\b/i.test(combo)) {
+    if (/JUBILAD/i.test(combo)) {
+      return {
+        codigo: 'JC',
+        nombre: afil ? `${afil} (Jubilado SSC)` : 'JUBILADO SEGURO SOCIAL CAMPESINO (SSC)',
+        subsistema: 'SEGURO SOCIAL CAMPESINO (SSC)',
+        badgeClass: 'badge-seguro jc'
+      };
+    }
     if (/JEFE DE FAMILIA/i.test(combo)) {
       return {
         codigo: 'CA',
@@ -1019,84 +1027,156 @@ function clasificarTipoSeguroCliente(tipoAfiliacion = '', observacion = '', acre
         badgeClass: 'badge-seguro ca'
       };
     }
-    if (/JUBILAD/i.test(combo)) {
-      return {
-        codigo: 'JUB-SSC',
-        nombre: 'JUBILADO SEGURO SOCIAL CAMPESINO (SSC)',
-        subsistema: 'SEGURO SOCIAL CAMPESINO (SSC)',
-        badgeClass: 'badge-seguro jub'
-      };
-    }
     return {
       codigo: 'CB',
-      nombre: 'SEGURO SOCIAL CAMPESINO - CB (BENEFICIARIO / DEPENDIENTE)',
+      nombre: 'SEGURO SOCIAL CAMPESINO - CB (BENEFICIARIO / FAMILIAR)',
       subsistema: 'SEGURO SOCIAL CAMPESINO (SSC)',
       badgeClass: 'badge-seguro cb'
     };
   }
 
-  // 2. JUBILADOS SEGURO GENERAL
-  if (/JUBILAD/i.test(combo)) {
+  // 3. HIJOS MENORES DE 18 AÑOS (EXTENSIÓN DE COBERTURA)
+  if (/HIJ[OA].*(?:MENOR|<18|18 A[ÑN]OS)|EXTENSI[OÓ]N.*HIJ[OA]|DEPENDIENTE HIJO/i.test(combo)) {
+    if (/PENSIONISTA|JUBILAD/i.test(combo) && !/AFILIADO/i.test(combo)) {
+      return {
+        codigo: 'HJ',
+        nombre: afil || 'HIJO DE PENSIONISTA (<18 AÑOS - EXTENSIÓN DE COBERTURA)',
+        subsistema: 'EXTENSIÓN DE COBERTURA (IESS)',
+        badgeClass: 'badge-seguro hj'
+      };
+    }
     return {
-      codigo: 'JUB-SG',
-      nombre: 'JUBILADO SEGURO GENERAL',
-      subsistema: 'SEGURO GENERAL (IESS)',
+      codigo: 'AG',
+      nombre: afil || 'HIJO DE AFILIADO (<18 AÑOS - EXTENSIÓN DE COBERTURA)',
+      subsistema: 'EXTENSIÓN DE COBERTURA (IESS)',
+      badgeClass: 'badge-seguro ag'
+    };
+  }
+
+  // 4. CÓNYUGE (EXTENSIÓN DE COBERTURA)
+  if (/C[OÓ]NYUGE/i.test(combo)) {
+    if (/PENSIONISTA|JUBILAD/i.test(combo)) {
+      return {
+        codigo: 'CJ',
+        nombre: afil || 'EXTENSIÓN DE COBERTURA CÓNYUGE PENSIONISTA',
+        subsistema: 'EXTENSIÓN DE COBERTURA (IESS)',
+        badgeClass: 'badge-seguro cj'
+      };
+    }
+    return {
+      codigo: 'CY',
+      nombre: afil || 'EXTENSIÓN DE COBERTURA CÓNYUGE AFILIADO',
+      subsistema: 'EXTENSIÓN DE COBERTURA (IESS)',
+      badgeClass: 'badge-seguro cy'
+    };
+  }
+
+  // 5. MONTEPÍO (ORFANDAD O VIUDEZ)
+  if (/MONTEP[IÍ]O|ORFANDAD/i.test(combo)) {
+    if (/ORFANDAD|HIJ[OA]/i.test(combo)) {
+      return {
+        codigo: 'MH',
+        nombre: obs && obs.includes('Montepío') ? obs : (afil || 'MONTEPÍO ORFANDAD'),
+        subsistema: 'SISTEMA DE PENSIONES (IESS)',
+        badgeClass: 'badge-seguro mh'
+      };
+    }
+    return {
+      codigo: 'MO',
+      nombre: obs && obs.includes('Montepío') ? obs : (afil || 'MONTEPÍO VIUDEZ (COTIZANTE)'),
+      subsistema: 'SISTEMA DE PENSIONES (IESS)',
+      badgeClass: 'badge-seguro mo'
+    };
+  }
+
+  // 6. RIESGOS DEL TRABAJO
+  if (/RIESGOS? DEL TRABAJO/i.test(combo)) {
+    return {
+      codigo: 'JR',
+      nombre: afil || 'PENSIONISTA DE RIESGOS DEL TRABAJO',
+      subsistema: 'SEGURO GENERAL DE RIESGOS DEL TRABAJO (SGRT)',
+      badgeClass: 'badge-seguro jr'
+    };
+  }
+
+  // 7. JUBILADOS / PENSIONISTAS
+  if (/JUBILAD|PENSIONES|PENSIONISTA/i.test(combo)) {
+    return {
+      codigo: 'JU',
+      nombre: afil || 'PENSIONISTA / JUBILADO (IESS)',
+      subsistema: 'SISTEMA DE PENSIONES (IESS)',
       badgeClass: 'badge-seguro jub'
     };
   }
 
-  // 3. MONTEPÍO / PENSIONISTA
-  if (/MONTEP[IÍ]O|PENSIONISTA/i.test(combo)) {
-    return {
-      codigo: 'MONTEPIO',
-      nombre: 'PENSIONISTA / MONTEPÍO (IESS)',
-      subsistema: 'SEGURO GENERAL (IESS)',
-      badgeClass: 'badge-seguro sg'
-    };
-  }
-
-  // 4. AFILIADO VOLUNTARIO
+  // 8. AFILIADO VOLUNTARIO
   if (/VOLUNTARI/i.test(combo)) {
     return {
-      codigo: 'VOL',
-      nombre: 'AFILIADO VOLUNTARIO (IESS)',
-      subsistema: 'SEGURO GENERAL (IESS)',
-      badgeClass: 'badge-seguro sg'
+      codigo: 'CV',
+      nombre: afil || 'AFILIADO VOLUNTARIO (IESS)',
+      subsistema: 'SEGURO DE AFILIACIÓN VOLUNTARIA',
+      badgeClass: 'badge-seguro cv'
     };
   }
 
-  // 5. DEPENDIENTES (CÓNYUGE / HIJOS MENORES - EXTENSIÓN DE COBERTURA)
-  if (/C[OÓ]NYUGE|HIJO|DEPENDIENTE|EXTENSI[OÓ]N/i.test(combo)) {
+  // 9. TRABAJO NO REMUNERADO DEL HOGAR
+  if (/TRABAJO NO REMUNERADO|HOGAR|AMA DE CASA/i.test(combo)) {
     return {
-      codigo: 'DEP-SG',
-      nombre: 'DEPENDIENTE POR EXTENSIÓN DE COBERTURA (IESS)',
-      subsistema: 'SEGURO GENERAL (IESS)',
-      badgeClass: 'badge-seguro sg'
+      codigo: 'TNRH',
+      nombre: afil || 'TRABAJO NO REMUNERADO DEL HOGAR',
+      subsistema: 'SEGURO TRABAJO NO REMUNERADO DEL HOGAR',
+      badgeClass: 'badge-seguro tnrh'
     };
   }
 
-  // 6. SEGURO GENERAL TIEMPO COMPLETO / PARCIAL
+  // 10. SEGURO GENERAL TIEMPO COMPLETO / PARCIAL (Solo si la descripción lo dice explícitamente)
   if (/TIEMPO COMPLETO/i.test(combo)) {
     return {
       codigo: 'SG',
-      nombre: 'AFILIADO SEGURO GENERAL TIEMPO COMPLETO',
-      subsistema: 'SEGURO GENERAL (IESS)',
+      nombre: afil || 'AFILIADO SEGURO GENERAL TIEMPO COMPLETO',
+      subsistema: 'SEGURO GENERAL OBLIGATORIO (SGO)',
       badgeClass: 'badge-seguro sg'
     };
   }
   if (/TIEMPO PARCIAL|MEDIO TIEMPO/i.test(combo)) {
     return {
       codigo: 'SG-TP',
-      nombre: 'AFILIADO SEGURO GENERAL TIEMPO PARCIAL',
-      subsistema: 'SEGURO GENERAL (IESS)',
+      nombre: afil || 'AFILIADO SEGURO GENERAL TIEMPO PARCIAL',
+      subsistema: 'SEGURO GENERAL OBLIGATORIO (SGO)',
+      badgeClass: 'badge-seguro sg'
+    };
+  }
+  if (/SEGURO GENERAL/i.test(combo)) {
+    return {
+      codigo: 'SG',
+      nombre: afil || 'AFILIADO SEGURO GENERAL',
+      subsistema: 'SEGURO GENERAL OBLIGATORIO (SGO)',
+      badgeClass: 'badge-seguro sg'
+    };
+  }
+
+  // 11. CASO GENERAL / POR DESCRIPCIÓN (NUNCA ASUMIR SEGURO GENERAL)
+  if (afil) {
+    return {
+      codigo: 'IESS',
+      nombre: afil,
+      subsistema: 'IESS',
+      badgeClass: 'badge-seguro sg'
+    };
+  }
+  if (obs) {
+    return {
+      codigo: 'IESS',
+      nombre: obs,
+      subsistema: 'IESS',
       badgeClass: 'badge-seguro sg'
     };
   }
 
   return {
-    codigo: 'SG',
-    nombre: afil || 'SEGURO GENERAL',
-    subsistema: 'SEGURO GENERAL (IESS)',
+    codigo: 'ACTIVO',
+    nombre: 'COBERTURA VIGENTE (DESCRIPCIÓN NO DISPONIBLE)',
+    subsistema: 'IESS',
     badgeClass: 'badge-seguro sg'
   };
 }
@@ -1109,10 +1189,10 @@ function determinarGrupoEtarioCliente(cedula = '', codigoSeguro = '', observacio
   const d3 = digits.length >= 3 ? parseInt(digits[2], 10) : 0;
   const combo = `${observacion} ${tipoAfiliacion}`.toUpperCase();
 
-  const mencionaHijo = /HIJ[OA]|MENOR|INFANT|PEDIATR/i.test(combo);
+  const mencionaHijo = /HIJ[OA]|MENOR|<18|18 A[ÑN]OS|INFANT|PEDIATR/i.test(combo);
   const esSerieMenor = d3 >= 6; // Series 176..., 096..., etc.
 
-  if (mencionaHijo || (esSerieMenor && codigoSeguro === 'CB') || codigoSeguro === 'DEP-SG') {
+  if (mencionaHijo || codigoSeguro === 'AG' || codigoSeguro === 'HJ' || (esSerieMenor && (codigoSeguro === 'CB' || codigoSeguro === 'MH')) || codigoSeguro === 'DEP-SG') {
     return {
       esMenor: true,
       grupoEtario: 'Menor de edad (Niño)',
@@ -1143,7 +1223,7 @@ function mostrarResultadoIndividual(data) {
 
   resCedula.textContent = data.cedula || '---';
   resNombres.textContent = (data.iess && data.iess.nombres) || 'No especificado';
-  resAfiliacion.textContent = (data.iess && data.iess.tipoAfiliacion) || 'Seguro General';
+  resAfiliacion.textContent = (data.iess && data.iess.tipoAfiliacion) || '---';
   resTiempo.textContent = `${data.duracionMs || 0} ms`;
 
   const isAcred = data.estadoFinal === 'ACREDITADO';
@@ -1902,11 +1982,11 @@ btnExportExcel.addEventListener('click', () => {
     'Es Menor de Edad': r.esMenorTexto || (r.esMenor ? 'SÍ' : 'NO'),
     'Estado Calificación': r.estado,
     'Código Seguro': r.codigoSeguro || '---',
-    'Tipo de Seguro': r.tipoSeguro || r.afiliacion,
-    'Tipo de Afiliación': r.afiliacion || '---',
-    'Observación': r.observacion || '---',
-    'Fecha Calificada': r.fechaCalificada || 'Hoy',
+    'Tipo de Seguro (Por Descripción)': r.tipoSeguro || r.afiliacion,
+    'Descripción de Afiliación (IESS)': r.afiliacion || '---',
+    'Observación IESS': r.observacion || '---',
     'Subsistema': r.subsistema || 'IESS',
+    'Fecha Calificada': r.fechaCalificada || 'Hoy',
     'Contingencia': 'Enfermedad (14)',
     'Fecha de Reporte': new Date().toLocaleDateString('es-EC')
   }));
@@ -1921,12 +2001,12 @@ btnExportExcel.addEventListener('click', () => {
     { wch: 24 },  // Grupo Etario (Menor de edad (Niño) / Adulto)
     { wch: 18 },  // Es Menor de Edad (SÍ / NO)
     { wch: 18 },  // Estado Calificación
-    { wch: 14 },  // Código Seguro (CA, CB, SG)
-    { wch: 50 },  // Tipo de Seguro
-    { wch: 32 },  // Tipo de Afiliación
-    { wch: 45 },  // Observación (Cédula Registrada con Derecho, etc.)
+    { wch: 14 },  // Código Seguro (CA, CB, SG, AG, HJ, etc.)
+    { wch: 55 },  // Tipo de Seguro (Por Descripción)
+    { wch: 45 },  // Descripción de Afiliación (IESS)
+    { wch: 45 },  // Observación IESS
+    { wch: 35 },  // Subsistema
     { wch: 16 },  // Fecha Calificada
-    { wch: 30 },  // Subsistema
     { wch: 18 },  // Contingencia
     { wch: 16 }   // Fecha de Reporte
   ];

@@ -841,6 +841,45 @@ body {
   border: 1px solid #6ee7b7;
 }
 
+.badge-seguro.jc {
+  background-color: #fef9c3;
+  color: #854d0e;
+  border: 1px solid #facc15;
+}
+
+.badge-seguro.ag,
+.badge-seguro.hj {
+  background-color: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #7dd3fc;
+}
+
+.badge-seguro.cy,
+.badge-seguro.cj {
+  background-color: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #c4b5fd;
+}
+
+.badge-seguro.mo,
+.badge-seguro.mh {
+  background-color: #fdf2f8;
+  color: #be185d;
+  border: 1px solid #fbcfe8;
+}
+
+.badge-seguro.cv {
+  background-color: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
+.badge-seguro.jr {
+  background-color: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
 .badge-seguro.sg {
   background-color: #eff6ff;
   color: #1d4ed8;

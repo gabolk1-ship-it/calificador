@@ -60,7 +60,23 @@ test('Clasificador de Seguro: clasifica CA, CB y SG correctamente', async () => 
   // Seguro General
   const cSG = clasificarTipoSeguro('Seguro General', 'Cédula Registrada con Derecho', true);
   assert.strictEqual(cSG.codigo, 'SG');
-  assert.strictEqual(cSG.subsistema, 'SEGURO GENERAL (IESS)');
+  assert.strictEqual(cSG.subsistema, 'SEGURO GENERAL OBLIGATORIO (SGO)');
+
+  // No asumir Seguro General cuando la descripción es de otra entidad o régimen
+  const cOtro = clasificarTipoSeguro('Pescadores Artesanales', 'Activo', true);
+  assert.strictEqual(cOtro.codigo, 'IESS');
+  assert.strictEqual(cOtro.nombre, 'Pescadores Artesanales');
+  assert.strictEqual(cOtro.subsistema, 'IESS');
+
+  // Hijos menores de 18 años (extensión de cobertura)
+  const cAG = clasificarTipoSeguro('Dependiente hijo menor de 18 años de afiliado/pensionista', 'Con Cobertura', true);
+  assert.strictEqual(cAG.codigo, 'AG');
+  assert.strictEqual(cAG.subsistema, 'EXTENSIÓN DE COBERTURA (IESS)');
+
+  // Afiliado Voluntario
+  const cCV = clasificarTipoSeguro('Afiliado Voluntario', 'Con Cobertura', true);
+  assert.strictEqual(cCV.codigo, 'CV');
+  assert.strictEqual(cCV.subsistema, 'SEGURO DE AFILIACIÓN VOLUNTARIA');
 
   // Detección de menores (niños)
   // Caso 1: Cédula de niño en SSC con serie 176...
@@ -76,9 +92,10 @@ test('Clasificador de Seguro: clasifica CA, CB y SG correctamente', async () => 
   assert.strictEqual(gAdultoCA.esMenorTexto, 'NO');
 
   // Caso 3: Cédula extensión cobertura hijos menores
-  const gMenorSG = determinarGrupoEtario('1750000000', 'DEP-SG', 'Hijo menor de 18 años', 'Extensión Cobertura');
+  const gMenorSG = determinarGrupoEtario('1750000000', 'AG', 'Hijo menor de 18 años', 'Extensión Cobertura');
   assert.strictEqual(gMenorSG.esMenor, true);
   assert.strictEqual(gMenorSG.grupoEtario, 'Menor de edad (Niño)');
   assert.strictEqual(gMenorSG.esMenorTexto, 'SÍ');
 });
+
 
