@@ -33,6 +33,7 @@ const statusTitle = document.getElementById('status-title');
 const statusDesc = document.getElementById('status-desc');
 const resCedula = document.getElementById('res-cedula');
 const resNombres = document.getElementById('res-nombres');
+const resGrupoEtario = document.getElementById('res-grupo-etario');
 const resTipoSeguro = document.getElementById('res-tipo-seguro');
 const resCodigoSeguro = document.getElementById('res-codigo-seguro');
 const resFechaCalificada = document.getElementById('res-fecha-calificada');
@@ -1100,6 +1101,43 @@ function clasificarTipoSeguroCliente(tipoAfiliacion = '', observacion = '', acre
   };
 }
 
+/**
+ * Clasificador del grupo etario (menor de edad / niño vs adulto) en cliente
+ */
+function determinarGrupoEtarioCliente(cedula = '', codigoSeguro = '', observacion = '', tipoAfiliacion = '') {
+  const digits = String(cedula || '').replace(/\D/g, '');
+  const d3 = digits.length >= 3 ? parseInt(digits[2], 10) : 0;
+  const combo = `${observacion} ${tipoAfiliacion}`.toUpperCase();
+
+  const mencionaHijo = /HIJ[OA]|MENOR|INFANT|PEDIATR/i.test(combo);
+  const esSerieMenor = d3 >= 6; // Series 176..., 096..., etc.
+
+  if (mencionaHijo || (esSerieMenor && codigoSeguro === 'CB') || codigoSeguro === 'DEP-SG') {
+    return {
+      esMenor: true,
+      grupoEtario: 'Menor de edad (Niño)',
+      esMenorTexto: 'SÍ',
+      badgeClass: 'badge-etario menor'
+    };
+  }
+
+  if (esSerieMenor) {
+    return {
+      esMenor: true,
+      grupoEtario: 'Menor de edad (Niño)',
+      esMenorTexto: 'SÍ',
+      badgeClass: 'badge-etario menor'
+    };
+  }
+
+  return {
+    esMenor: false,
+    grupoEtario: 'Adulto',
+    esMenorTexto: 'NO',
+    badgeClass: 'badge-etario adulto'
+  };
+}
+
 function mostrarResultadoIndividual(data) {
   resultContainer.style.display = 'block';
 
@@ -1117,6 +1155,22 @@ function mostrarResultadoIndividual(data) {
         badgeClass: `badge-seguro ${data.iess.codigoSeguro.toLowerCase().replace(/[^a-z]/g, '')}`
       }
     : clasificarTipoSeguroCliente(data.iess?.tipoAfiliacion, data.iess?.observacion, isAcred);
+
+  if (resGrupoEtario) {
+    const etario = (data.iess && data.iess.grupoEtario)
+      ? {
+          esMenor: data.iess.esMenor,
+          grupoEtario: data.iess.grupoEtario,
+          badgeClass: data.iess.esMenor ? 'badge-etario menor' : 'badge-etario adulto'
+        }
+      : determinarGrupoEtarioCliente(data.cedula, segInfo.codigo, data.iess?.observacion, data.iess?.tipoAfiliacion);
+
+    if (etario.esMenor) {
+      resGrupoEtario.innerHTML = `<span class="${etario.badgeClass}">🧒 ${etario.grupoEtario}</span>`;
+    } else {
+      resGrupoEtario.innerHTML = `<span class="${etario.badgeClass}">👤 ${etario.grupoEtario}</span>`;
+    }
+  }
 
   if (resTipoSeguro) resTipoSeguro.textContent = segInfo.nombre;
   if (resCodigoSeguro) {
@@ -1667,6 +1721,10 @@ btnStartBulk.addEventListener('click', async () => {
           indice: currentIndex + 1,
           cedula: ced,
           paciente: 'Cédula Inválida',
+          esMenor: false,
+          grupoEtario: '---',
+          esMenorTexto: '---',
+          badgeGrupoEtarioClass: 'badge-etario adulto',
           estado: 'INVÁLIDA',
           tipoSeguro: 'CÉDULA INVÁLIDA',
           codigoSeguro: 'ERR',
@@ -1711,10 +1769,23 @@ btnStartBulk.addEventListener('click', async () => {
               }
             : clasificarTipoSeguroCliente(data.iess?.tipoAfiliacion, data.iess?.observacion, isAcred);
 
+          const etario = (data.iess && data.iess.grupoEtario)
+            ? {
+                esMenor: data.iess.esMenor,
+                grupoEtario: data.iess.grupoEtario,
+                esMenorTexto: data.iess.esMenorTexto || (data.iess.esMenor ? 'SÍ' : 'NO'),
+                badgeClass: data.iess.esMenor ? 'badge-etario menor' : 'badge-etario adulto'
+              }
+            : determinarGrupoEtarioCliente(ced, segInfo.codigo, data.iess?.observacion, data.iess?.tipoAfiliacion);
+
           rowData = {
             indice: currentIndex + 1,
             cedula: ced,
             paciente: (data.iess && data.iess.nombres) || 'No especificado',
+            esMenor: etario.esMenor,
+            grupoEtario: etario.grupoEtario,
+            esMenorTexto: etario.esMenorTexto,
+            badgeGrupoEtarioClass: etario.badgeClass,
             estado: isAcred ? 'ACREDITADO' : 'NO ACREDITADO',
             tipoSeguro: segInfo.nombre,
             codigoSeguro: segInfo.codigo,
@@ -1731,6 +1802,10 @@ btnStartBulk.addEventListener('click', async () => {
             indice: currentIndex + 1,
             cedula: ced,
             paciente: 'Error de Red',
+            esMenor: false,
+            grupoEtario: 'Error',
+            esMenorTexto: '---',
+            badgeGrupoEtarioClass: 'badge-etario adulto',
             estado: 'ERROR',
             tipoSeguro: 'ERROR DE CONEXIÓN',
             codigoSeguro: 'ERR',
@@ -1800,6 +1875,7 @@ function agregarFilaTabla(row) {
     <td>${row.indice}</td>
     <td><strong>${row.cedula}</strong></td>
     <td>${row.paciente}</td>
+    <td><span class="${row.badgeGrupoEtarioClass || 'badge-etario adulto'}">${row.esMenor ? '🧒 Menor de edad' : '👤 Adulto'}</span></td>
     <td><span class="${badgeClass}">${row.estado}</span></td>
     <td><span class="${row.badgeSeguroClass || 'badge-seguro sg'}">${row.codigoSeguro || '---'}</span></td>
     <td><strong style="color: ${colorTextoSeguro}; font-size: 0.82rem;">${row.tipoSeguro || row.afiliacion}</strong></td>
@@ -1822,6 +1898,8 @@ btnExportExcel.addEventListener('click', () => {
     'N°': r.indice,
     'Cédula': r.cedula,
     'Apellidos y Nombres': r.paciente,
+    'Grupo Etario': r.grupoEtario || (r.esMenor ? 'Menor de edad (Niño)' : 'Adulto'),
+    'Es Menor de Edad': r.esMenorTexto || (r.esMenor ? 'SÍ' : 'NO'),
     'Estado Calificación': r.estado,
     'Código Seguro': r.codigoSeguro || '---',
     'Tipo de Seguro': r.tipoSeguro || r.afiliacion,
@@ -1840,11 +1918,13 @@ btnExportExcel.addEventListener('click', () => {
     { wch: 6 },   // N°
     { wch: 14 },  // Cédula
     { wch: 38 },  // Apellidos y Nombres
+    { wch: 24 },  // Grupo Etario (Menor de edad (Niño) / Adulto)
+    { wch: 18 },  // Es Menor de Edad (SÍ / NO)
     { wch: 18 },  // Estado Calificación
     { wch: 14 },  // Código Seguro (CA, CB, SG)
-    { wch: 48 },  // Tipo de Seguro
-    { wch: 32 },  // Tipo de Afiliación (ej. Afiliado Seguro Campesino)
-    { wch: 45 },  // Observación (ej. Cédula Registrada con Derecho)
+    { wch: 50 },  // Tipo de Seguro
+    { wch: 32 },  // Tipo de Afiliación
+    { wch: 45 },  // Observación (Cédula Registrada con Derecho, etc.)
     { wch: 16 },  // Fecha Calificada
     { wch: 30 },  // Subsistema
     { wch: 18 },  // Contingencia

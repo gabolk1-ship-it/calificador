@@ -43,3 +43,42 @@ test('Solucionador Altcha: resuelve reto SHA-256 en menos de 200ms', () => {
   assert.strictEqual(parsed.number, targetNumber);
   assert.strictEqual(parsed.challenge, challenge);
 });
+
+test('Clasificador de Seguro: clasifica CA, CB y SG correctamente', async () => {
+  const { clasificarTipoSeguro, determinarGrupoEtario } = await import('../lib/iessScraper.js');
+
+  // Jefe de familia SSC
+  const cCA = clasificarTipoSeguro('Afiliado Seguro Campesino', 'Jefe de Familia del SSC', true);
+  assert.strictEqual(cCA.codigo, 'CA');
+  assert.strictEqual(cCA.subsistema, 'SEGURO SOCIAL CAMPESINO (SSC)');
+
+  // Beneficiario dependiente SSC
+  const cCB = clasificarTipoSeguro('Afiliado Seguro Campesino', 'Cédula Registrada con Derecho', true);
+  assert.strictEqual(cCB.codigo, 'CB');
+  assert.strictEqual(cCB.subsistema, 'SEGURO SOCIAL CAMPESINO (SSC)');
+
+  // Seguro General
+  const cSG = clasificarTipoSeguro('Seguro General', 'Cédula Registrada con Derecho', true);
+  assert.strictEqual(cSG.codigo, 'SG');
+  assert.strictEqual(cSG.subsistema, 'SEGURO GENERAL (IESS)');
+
+  // Detección de menores (niños)
+  // Caso 1: Cédula de niño en SSC con serie 176...
+  const gMenorSSC = determinarGrupoEtario('1761031838', 'CB', 'Cédula Registrada con Derecho', 'Afiliado Seguro Campesino');
+  assert.strictEqual(gMenorSSC.esMenor, true);
+  assert.strictEqual(gMenorSSC.grupoEtario, 'Menor de edad (Niño)');
+  assert.strictEqual(gMenorSSC.esMenorTexto, 'SÍ');
+
+  // Caso 2: Cédula tradicional adulto jefe de familia
+  const gAdultoCA = determinarGrupoEtario('1708683873', 'CA', 'Jefe de Familia del SSC', 'Afiliado Seguro Campesino');
+  assert.strictEqual(gAdultoCA.esMenor, false);
+  assert.strictEqual(gAdultoCA.grupoEtario, 'Adulto');
+  assert.strictEqual(gAdultoCA.esMenorTexto, 'NO');
+
+  // Caso 3: Cédula extensión cobertura hijos menores
+  const gMenorSG = determinarGrupoEtario('1750000000', 'DEP-SG', 'Hijo menor de 18 años', 'Extensión Cobertura');
+  assert.strictEqual(gMenorSG.esMenor, true);
+  assert.strictEqual(gMenorSG.grupoEtario, 'Menor de edad (Niño)');
+  assert.strictEqual(gMenorSG.esMenorTexto, 'SÍ');
+});
+
