@@ -42,6 +42,14 @@ const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
 const bulkTextarea = document.getElementById('bulk-textarea');
 const bulkCounterLive = document.getElementById('bulk-counter-live');
+const modeAllRows = document.getElementById('mode-all-rows');
+const modeUniqueOnly = document.getElementById('mode-unique-only');
+const sheetSelectorContainer = document.getElementById('sheet-selector-container');
+const sheetSelect = document.getElementById('sheet-select');
+
+// Almacén en memoria del archivo cargado para alternar entre "Todas las filas" y "Únicas" sin re-leer
+let archivoCargadoDatos = null; // { todas: [], unicas: [], nombre: '', cerosRecuperados: 0 }
+let workbookSheetsMap = null;   // Map: sheetName -> { todas: [], unicas: [], ceros: 0 }
 
 function actualizarContadorLive() {
   if (!bulkCounterLive) return;
@@ -50,9 +58,73 @@ function actualizarContadorLive() {
     bulkCounterLive.textContent = '0 cédulas detectadas';
     return;
   }
-  const tokens = raw.split(/[\r\n,;\s]+/).map(t => t.trim().replace(/\D/g, '')).filter(t => t.length === 9 || t.length === 10);
-  const unicas = new Set(tokens);
-  bulkCounterLive.textContent = unicas.size + ' cédulas detectadas (listas para calificar)';
+  const lines = raw.split(/[\r\n]+/).map(t => t.trim()).filter(Boolean);
+  const cedulas = [];
+  lines.forEach(line => {
+    // Si la línea tiene formato separado por comas o tabs, buscar la cédula
+    const parts = line.split(/[,;\t]/).map(p => p.trim());
+    let found = false;
+    for (const p of parts) {
+      const digits = p.replace(/\D/g, '');
+      if (digits.length === 9 || digits.length === 10) {
+        cedulas.push(normalizarCedula(digits));
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      const digits = line.replace(/\D/g, '');
+      if (digits.length > 0) cedulas.push(digits);
+    }
+  });
+
+  const total = cedulas.length;
+  const unicas = new Set(cedulas).size;
+  if (total === unicas) {
+    bulkCounterLive.textContent = `${total} cédulas detectadas (listas para calificar)`;
+  } else {
+    bulkCounterLive.textContent = `${total} filas detectadas (${unicas} pacientes únicos)`;
+  }
+}
+
+function actualizarTextareaPorModo() {
+  if (!archivoCargadoDatos) return;
+  const esUnicas = modeUniqueOnly && modeUniqueOnly.checked;
+  bulkTextarea.value = (esUnicas ? archivoCargadoDatos.unicas : archivoCargadoDatos.todas).join('\n');
+  actualizarContadorLive();
+}
+
+if (modeAllRows) modeAllRows.addEventListener('change', actualizarTextareaPorModo);
+if (modeUniqueOnly) modeUniqueOnly.addEventListener('change', actualizarTextareaPorModo);
+
+if (sheetSelect) {
+  sheetSelect.addEventListener('change', () => {
+    if (!workbookSheetsMap) return;
+    const sel = sheetSelect.value;
+    if (sel === '__TODAS__') {
+      const todas = [];
+      let ceros = 0;
+      workbookSheetsMap.forEach(info => {
+        todas.push(...info.todas);
+        ceros += info.ceros;
+      });
+      archivoCargadoDatos = {
+        todas,
+        unicas: [...new Set(todas)],
+        nombre: archivoCargadoDatos ? archivoCargadoDatos.nombre : 'Excel',
+        cerosRecuperados: ceros
+      };
+    } else if (workbookSheetsMap.has(sel)) {
+      const info = workbookSheetsMap.get(sel);
+      archivoCargadoDatos = {
+        todas: info.todas,
+        unicas: info.unicas,
+        nombre: `${archivoCargadoDatos ? archivoCargadoDatos.nombre : 'Excel'} [${sel}]`,
+        cerosRecuperados: info.ceros
+      };
+    }
+    actualizarTextareaPorModo();
+  });
 }
 
 bulkTextarea.addEventListener('input', actualizarContadorLive);
@@ -869,18 +941,25 @@ if (btnLoadDatosmis) {
         return;
       }
 
-      bulkTextarea.value = data.cedulas.join('\n');
-      actualizarContadorLive();
+      archivoCargadoDatos = {
+        todas: data.todasCedulas || data.cedulas,
+        unicas: data.cedulas,
+        nombre: data.archivo,
+        cerosRecuperados: data.conCeroRecuperado
+      };
 
-      alert(`¡Archivo cargado automáticamente!\n\n` +
+      if (sheetSelectorContainer) sheetSelectorContainer.style.display = 'none';
+      actualizarTextareaPorModo();
+
+      alert(`¡Archivo cargado automáticamente desde C:\\DATOSMIS!\n\n` +
             `• Archivo leído: ${data.archivo}\n` +
-            `• Total registros de atención médica: ${data.totalAtenciones}\n` +
-            `• Pacientes únicos listos: ${data.unicasCount}\n` +
+            `• Total registros de atención: ${(data.totalAtenciones || data.cedulas.length).toLocaleString()} filas\n` +
+            `• Pacientes únicos: ${data.unicasCount.toLocaleString()}\n` +
             `• Cédulas con '0' inicial restaurado: ${data.conCeroRecuperado}\n\n` +
-            `Ya están en pantalla listos para pulsar "Iniciar Calificación Masiva".`);
+            `Las filas están cargadas en pantalla listas para calificar manteniendo la planilla 1 a 1.`);
 
       btnLoadDatosmis.disabled = false;
-      btnLoadDatosmis.innerHTML = `<span>✓ Cargado: ${data.archivo} (${data.unicasCount} pacientes)</span>`;
+      btnLoadDatosmis.innerHTML = `<span>✓ Cargado: ${data.archivo} (${(data.totalAtenciones || data.unicasCount).toLocaleString()} filas)</span>`;
     } catch (err) {
       alert(`No se pudo cargar desde el servidor local: ${err.message}`);
       btnLoadDatosmis.disabled = false;
@@ -892,38 +971,145 @@ if (btnLoadDatosmis) {
 function procesarArchivoSeleccionado(file) {
   const ext = file.name.split('.').pop().toLowerCase();
 
-  if (ext === 'xlsx' || ext === 'xls') {
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'xlsm') {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
-        const cedulasExtraidas = [];
-        let corregidasConCero = 0;
+        workbookSheetsMap = new Map();
+        const sheetsConDatos = [];
 
-        rows.forEach(r => {
-          if (!Array.isArray(r)) return;
-          r.forEach(cell => {
-            if (cell === null || cell === undefined) return;
-            const raw = String(cell).trim();
-            // Limpiar
-            const digits = raw.replace(/\D/g, '');
-            if (digits.length === 9 || digits.length === 10) {
-              const normal = normalizarCedula(digits);
-              if (normal.length === 10) {
-                if (digits.length === 9) corregidasConCero++;
-                cedulasExtraidas.push(normal);
+        workbook.SheetNames.forEach(sheetName => {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet) return;
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          if (!rows || rows.length === 0) return;
+
+          // Buscar columna de cédula si la primera fila tiene cabecera
+          let colIdx = -1;
+          if (Array.isArray(rows[0])) {
+            const headers = rows[0].map(h => String(h || '').trim().toUpperCase());
+            const posiblesHeaders = ['NRO_DOCUMENTO', 'NUMERO_DOCUMENTO', 'CEDULA', 'IDENTIFICACION', 'DOCUMENTO', 'NRO_DOC', 'PACIENTE_CEDULA', 'CEDULA_PACIENTE'];
+            for (const ph of posiblesHeaders) {
+              const idx = headers.indexOf(ph);
+              if (idx !== -1) {
+                colIdx = idx;
+                break;
+              }
+            }
+          }
+
+          const cedulasHoja = [];
+          let corregidasHoja = 0;
+
+          rows.forEach((r, rIdx) => {
+            if (!Array.isArray(r)) return;
+            if (colIdx !== -1) {
+              if (rIdx === 0) return; // Saltar cabecera
+              const cell = r[colIdx];
+              if (cell !== null && cell !== undefined) {
+                const digits = String(cell).replace(/\D/g, '');
+                if (digits.length === 9 || digits.length === 10) {
+                  const norm = normalizarCedula(digits);
+                  if (digits.length === 9) corregidasHoja++;
+                  cedulasHoja.push(norm);
+                }
+              }
+            } else {
+              // Sin encabezado específico (ej. CB CA.xlsx): escanear fila y tomar la primera cédula de la fila
+              for (const cell of r) {
+                if (cell === null || cell === undefined) continue;
+                const digits = String(cell).replace(/\D/g, '');
+                if (digits.length === 9 || digits.length === 10) {
+                  const norm = normalizarCedula(digits);
+                  if (digits.length === 9) corregidasHoja++;
+                  cedulasHoja.push(norm);
+                  break; // 1 cédula por fila de atención
+                }
               }
             }
           });
+
+          if (cedulasHoja.length > 0) {
+            const unicasHoja = [...new Set(cedulasHoja)];
+            workbookSheetsMap.set(sheetName, {
+              todas: cedulasHoja,
+              unicas: unicasHoja,
+              ceros: corregidasHoja
+            });
+            sheetsConDatos.push({
+              name: sheetName,
+              total: cedulasHoja.length,
+              unicas: unicasHoja.length,
+              ceros: corregidasHoja
+            });
+          }
         });
 
-        const unicas = [...new Set(cedulasExtraidas)];
-        bulkTextarea.value = unicas.join('\n');
-        alert(`¡Listo! Se cargaron ${unicas.length} cédulas desde "${file.name}".\n(Se restauró automáticamente el '0' a la izquierda en ${corregidasConCero} cédulas que Excel había recortado).`);
+        if (sheetsConDatos.length === 0) {
+          alert(`No se detectaron columnas con números de cédula (de 9 o 10 dígitos) en el archivo "${file.name}".`);
+          return;
+        }
+
+        // Si hay múltiples hojas con datos, mostrar selector de hojas
+        if (sheetsConDatos.length > 1 && sheetSelectorContainer && sheetSelect) {
+          sheetSelect.innerHTML = '';
+          const totalGeneral = sheetsConDatos.reduce((acc, s) => acc + s.total, 0);
+          const optTodas = document.createElement('option');
+          optTodas.value = '__TODAS__';
+          optTodas.textContent = `⭐ Todas las hojas combinadas (${totalGeneral.toLocaleString()} filas en total)`;
+          sheetSelect.appendChild(optTodas);
+
+          sheetsConDatos.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.name;
+            opt.textContent = `📄 Hoja: ${s.name} (${s.total.toLocaleString()} filas, ${s.unicas.toLocaleString()} únicos)`;
+            sheetSelect.appendChild(opt);
+          });
+
+          sheetSelectorContainer.style.display = 'block';
+
+          // Por defecto combinar todas las hojas
+          const todasCombinadas = [];
+          let cerosTotales = 0;
+          sheetsConDatos.forEach(s => {
+            todasCombinadas.push(...workbookSheetsMap.get(s.name).todas);
+            cerosTotales += s.ceros;
+          });
+
+          archivoCargadoDatos = {
+            todas: todasCombinadas,
+            unicas: [...new Set(todasCombinadas)],
+            nombre: file.name,
+            cerosRecuperados: cerosTotales
+          };
+        } else {
+          // Una sola hoja
+          if (sheetSelectorContainer) sheetSelectorContainer.style.display = 'none';
+          const s = sheetsConDatos[0];
+          const info = workbookSheetsMap.get(s.name);
+          archivoCargadoDatos = {
+            todas: info.todas,
+            unicas: info.unicas,
+            nombre: file.name,
+            cerosRecuperados: info.ceros
+          };
+        }
+
+        actualizarTextareaPorModo();
+
+        const totalCargado = archivoCargadoDatos.todas.length;
+        const unicosCargados = archivoCargadoDatos.unicas.length;
+
+        alert(`¡Archivo cargado con éxito!\n\n` +
+              `• Archivo: ${file.name}\n` +
+              `• Total filas en planilla: ${totalCargado.toLocaleString()}\n` +
+              `• Pacientes únicos: ${unicosCargados.toLocaleString()}\n` +
+              `• Cédulas restauradas con el '0' inicial: ${archivoCargadoDatos.cerosRecuperados}\n\n` +
+              `Se han cargado las ${totalCargado.toLocaleString()} filas completas 1 a 1 para que tu reporte de exportación cuadre exactamente con tu archivo original.\n` +
+              `Gracias a la memoria inteligente, las filas repetidas se calificarán al instante.`);
       } catch (err) {
         alert(`Error al leer archivo Excel: ${err.message}`);
       }
@@ -931,6 +1117,7 @@ function procesarArchivoSeleccionado(file) {
     reader.readAsArrayBuffer(file);
   } else {
     // CSV o TXT
+    if (sheetSelectorContainer) sheetSelectorContainer.style.display = 'none';
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target.result;
@@ -938,15 +1125,14 @@ function procesarArchivoSeleccionado(file) {
       const cedulasExtraidas = [];
       let corregidasConCero = 0;
 
-      // Detectar si tiene cabecera CSV (con delimitador ';' o ',')
+      // Detectar cabecera CSV
       if (rawLines.length > 0) {
         const firstLine = rawLines[0];
-        const delim = firstLine.includes(';') ? ';' : ',';
+        const delim = firstLine.includes(';') ? ';' : (firstLine.includes('\t') ? '\t' : ',');
         const headers = firstLine.split(delim).map(h => h.replace(/["']/g, '').trim().toUpperCase());
         
         let colIndex = -1;
-        // Buscar nombres típicos de columna de cédula
-        const posiblesHeaders = ['NRO_DOCUMENTO', 'NUMERO_DOCUMENTO', 'CEDULA', 'IDENTIFICACION', 'DOCUMENTO', 'NRO_DOC'];
+        const posiblesHeaders = ['NRO_DOCUMENTO', 'NUMERO_DOCUMENTO', 'CEDULA', 'IDENTIFICACION', 'DOCUMENTO', 'NRO_DOC', 'PACIENTE_CEDULA'];
         for (const ph of posiblesHeaders) {
           const idx = headers.indexOf(ph);
           if (idx !== -1) {
@@ -956,7 +1142,6 @@ function procesarArchivoSeleccionado(file) {
         }
 
         if (colIndex !== -1) {
-          // Extraer directamente de la columna identificada
           for (let i = 1; i < rawLines.length; i++) {
             const cols = rawLines[i].split(delim);
             if (cols.length > colIndex) {
@@ -964,48 +1149,56 @@ function procesarArchivoSeleccionado(file) {
               const digits = rawVal.replace(/\D/g, '');
               if (digits.length === 9 || digits.length === 10) {
                 const normal = normalizarCedula(digits);
-                if (validarCedulaCliente(normal)) {
-                  if (digits.length === 9) corregidasConCero++;
-                  cedulasExtraidas.push(normal);
-                }
+                if (digits.length === 9) corregidasConCero++;
+                cedulasExtraidas.push(normal);
               }
             }
           }
         } else {
-          // Búsqueda genérica en todo el texto
+          // Búsqueda genérica en cada línea
           rawLines.forEach(line => {
             const tokens = line.split(/[;,\t]/);
-            tokens.forEach(tok => {
+            for (const tok of tokens) {
               const digits = tok.replace(/["']/g, '').trim().replace(/\D/g, '');
               if (digits.length === 9 || digits.length === 10) {
                 const normal = normalizarCedula(digits);
-                if (validarCedulaCliente(normal)) {
-                  if (digits.length === 9) corregidasConCero++;
-                  cedulasExtraidas.push(normal);
-                }
+                if (digits.length === 9) corregidasConCero++;
+                cedulasExtraidas.push(normal);
+                break;
               }
-            });
+            }
           });
         }
       }
 
+      if (cedulasExtraidas.length === 0) {
+        alert(`No se detectaron cédulas en el archivo "${file.name}".`);
+        return;
+      }
+
       const totalAtenciones = cedulasExtraidas.length;
       const unicas = [...new Set(cedulasExtraidas)];
-      bulkTextarea.value = unicas.join('\n');
-      actualizarContadorLive();
+      archivoCargadoDatos = {
+        todas: cedulasExtraidas,
+        unicas,
+        nombre: file.name,
+        cerosRecuperados: corregidasConCero
+      };
+
+      actualizarTextareaPorModo();
 
       alert(`¡Archivo cargado con éxito!\n\n` +
             `• Archivo: ${file.name}\n` +
-            `• Total registros de atención: ${totalAtenciones}\n` +
-            `• Pacientes únicos a calificar: ${unicas.length}\n` +
+            `• Total registros de atención: ${totalAtenciones.toLocaleString()} filas\n` +
+            `• Pacientes únicos: ${unicas.length.toLocaleString()}\n` +
             `• Cédulas restauradas con el '0' inicial: ${corregidasConCero}\n\n` +
-            `Al procesar los pacientes únicos evitarás consultar duplicados al IESS y el lote terminará el doble de rápido.`);
+            `Se han cargado las ${totalAtenciones.toLocaleString()} filas completas 1 a 1.`);
     };
-    reader.readAsText(file, 'latin1'); // latin1 / iso-8859-1 compatible con exportaciones hospitalarias con tildes
+    reader.readAsText(file, 'latin1');
   }
 }
 
-// Iniciar Procesamiento Masivo con Pool Paralelo
+// Iniciar Procesamiento Masivo con Pool Paralelo y Caché Inteligente
 btnStartBulk.addEventListener('click', async () => {
   const rawText = bulkTextarea.value.trim();
   if (!rawText) {
@@ -1013,27 +1206,37 @@ btnStartBulk.addEventListener('click', async () => {
     return;
   }
 
-  // Dividir por líneas o comas y normalizar cada número (reparando los que tienen 9 dígitos)
-  const tokens = rawText.split(/[\r\n,;\s]+/).map(t => t.trim()).filter(Boolean);
+  // Dividir por líneas para respetar el orden exacto 1 a 1 de la planilla
+  const rawLines = rawText.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
   const cedulas = [];
   let recuperadas = 0;
 
-  tokens.forEach(t => {
-    const digits = t.replace(/\D/g, '');
-    if (digits.length === 9 || digits.length === 10) {
-      const norm = normalizarCedula(digits);
-      if (norm.length === 10) {
+  rawLines.forEach(line => {
+    // Si la línea contiene columnas separadas por comas o tabs, buscar la cédula
+    const parts = line.split(/[,;\t]/).map(p => p.trim());
+    let found = false;
+    for (const p of parts) {
+      const digits = p.replace(/\D/g, '');
+      if (digits.length === 9 || digits.length === 10) {
+        const norm = normalizarCedula(digits);
         if (digits.length === 9) recuperadas++;
         cedulas.push(norm);
+        found = true;
+        break;
       }
-    } else if (digits.length > 0) {
-      cedulas.push(digits); // Para que se marque como inválida
+    }
+    if (!found) {
+      const digits = line.replace(/\D/g, '');
+      if (digits.length > 0) {
+        cedulas.push(digits); // Para que se marque como inválida manteniendo el orden
+      }
     }
   });
 
-  const cedulasUnicas = [...new Set(cedulas)];
+  const esModoUnicas = modeUniqueOnly && modeUniqueOnly.checked;
+  const listaAProcesar = esModoUnicas ? [...new Set(cedulas)] : cedulas;
 
-  if (cedulasUnicas.length === 0) {
+  if (listaAProcesar.length === 0) {
     alert('No se detectaron cédulas en el texto pegado.');
     return;
   }
@@ -1047,26 +1250,27 @@ btnStartBulk.addEventListener('click', async () => {
   btnStartBulk.style.display = 'none';
   btnStopBulk.style.display = 'inline-block';
 
-  const total = cedulasUnicas.length;
+  const total = listaAProcesar.length;
   let completados = 0;
   let acreditadosCount = 0;
   let noAcreditadosCount = 0;
   let invalidosCount = 0;
 
-  statTotal.textContent = total;
+  statTotal.textContent = total.toLocaleString();
   statAcreditados.textContent = 0;
   statNoAcreditados.textContent = 0;
   statInvalidos.textContent = 0;
   actualizarBarraProgreso(0, total);
 
-  // Concurrencia de 4 peticiones paralelas para máxima velocidad
+  // Caché en memoria para reutilizar consultas de pacientes repetidos
+  const cacheIESS = new Map();
   const CONCURRENCIA = 4;
   let indiceActual = 0;
 
   async function worker() {
-    while (indiceActual < cedulasUnicas.length && !bulkAborted) {
+    while (indiceActual < listaAProcesar.length && !bulkAborted) {
       const currentIndex = indiceActual++;
-      const ced = cedulasUnicas[currentIndex];
+      const ced = listaAProcesar[currentIndex];
       let rowData = null;
 
       // Validación con Módulo 10
@@ -1083,8 +1287,15 @@ btnStartBulk.addEventListener('click', async () => {
         };
       } else {
         try {
-          const res = await fetch(`/api/calificar?cedula=${ced}`);
-          const data = await res.json();
+          let data;
+          if (cacheIESS.has(ced)) {
+            // Reutilización instantánea (0ms) sin sobrecargar al IESS
+            data = cacheIESS.get(ced);
+          } else {
+            const res = await fetch(`/api/calificar?cedula=${ced}`);
+            data = await res.json();
+            cacheIESS.set(ced, data);
+          }
 
           const isAcred = data.estadoFinal === 'ACREDITADO';
           if (isAcred) {
@@ -1134,7 +1345,7 @@ btnStartBulk.addEventListener('click', async () => {
 
   await Promise.all(workers);
 
-  // Ordenar resultados por índice original
+  // Ordenar resultados por índice original para garantizar correspondencia 1 a 1 exacta
   bulkResults.sort((a, b) => a.indice - b.indice);
 
   btnStartBulk.style.display = 'inline-block';

@@ -1,4 +1,4 @@
-﻿import http from 'node:http';
+import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -102,7 +102,8 @@ const server = http.createServer(async (req, res) => {
         totalAtenciones: cedulas.length,
         unicasCount: unicas.length,
         conCeroRecuperado,
-        cedulas: unicas
+        cedulas: unicas,
+        todasCedulas: cedulas
       }));
       return;
     } catch (err) {

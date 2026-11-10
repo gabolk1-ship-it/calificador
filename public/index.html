@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/css/style.css?v=1.4.2">
+  <link rel="stylesheet" href="/css/style.css?v=1.4.3">
   <!-- Escáner QR / Barcode -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <!-- Lector y Exportador Excel XLSX / CSV -->
@@ -21,7 +21,7 @@
       <span>🏥</span> Calificador de Salud
     </h1>
     <div class="header-badges">
-      <span class="badge-version" id="app-version-badge">v1.4.2</span>
+      <span class="badge-version" id="app-version-badge">v1.4.3</span>
       <span class="badge-contingencia">Enfermedad (Cód. 14)</span>
     </div>
   </header>
@@ -180,12 +180,21 @@
 
         <!-- Selector Universal de Archivo (Desde cualquier carpeta del celular o PC) -->
         <div style="margin-bottom: 12px;">
-          <input type="file" id="file-input" accept=".xlsx, .xls, .csv, .txt" style="display: none;">
+          <input type="file" id="file-input" accept=".xlsx, .xls, .xlsm, .csv, .txt" style="display: none;">
           <button type="button" id="btn-pick-file" style="width: 100%; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; border: none; border-radius: 12px; padding: 15px; font-size: 0.95rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 3px 10px rgba(2, 132, 199, 0.25);">
             <svg style="width: 22px; height: 22px; fill: currentColor;" viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-            <span>📁 Seleccionar Archivo (Excel, CSV o TXT)</span>
+            <span>📁 Seleccionar Archivo (Excel, XLSM, CSV o TXT)</span>
           </button>
           <div id="file-selected-name" style="margin-top: 6px; font-size: 0.82rem; color: var(--success); text-align: center; font-weight: 600;"></div>
+        </div>
+
+        <!-- Selector de Hoja si el Excel tiene múltiples hojas -->
+        <div id="sheet-selector-container" style="display: none; margin-bottom: 12px; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 10px; padding: 10px 12px;">
+          <label for="sheet-select" style="font-size: 0.82rem; font-weight: 700; color: #166534; display: block; margin-bottom: 5px;">
+            📑 Múltiples hojas detectadas en el libro:
+          </label>
+          <select id="sheet-select" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #86efac; font-size: 0.85rem; font-weight: 600; color: #166534; background: white; outline: none; cursor: pointer;">
+          </select>
         </div>
 
         <!-- Zona de arrastre para PC / laptop -->
@@ -203,17 +212,32 @@
           </button>
         </div>
 
+        <!-- Selector de Modo de Procesamiento (Planilla completa 1 a 1 vs Pacientes únicos) -->
+        <div id="bulk-mode-container" style="margin-bottom: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;">
+          <div style="font-size: 0.82rem; font-weight: 700; color: var(--slate-800); margin-bottom: 6px;">
+            Modo de Calificación Masiva:
+          </div>
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin-bottom: 6px; font-size: 0.82rem; color: var(--slate-800);">
+            <input type="radio" name="bulk-mode" id="mode-all-rows" value="all" checked style="margin-top: 2px;">
+            <span><strong>Todas las filas (Planilla completa 1 a 1):</strong> Mantiene cada registro del archivo original tal cual (ej. 2,347 filas). <em>Usa memoria inteligente para calificar en segundos sin saturar al IESS.</em></span>
+          </label>
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.82rem; color: var(--slate-700);">
+            <input type="radio" name="bulk-mode" id="mode-unique-only" value="unique" style="margin-top: 2px;">
+            <span><strong>Solo pacientes únicos (Sin filas duplicadas):</strong> Califica una sola vez a cada paciente aunque tenga varias atenciones (ej. 360 pacientes).</span>
+          </label>
+        </div>
+
         <!-- O pegar lista manual -->
-        <div style="margin-top: 16px;">
+        <div style="margin-top: 14px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <label for="bulk-textarea" style="font-size: 0.82rem; font-weight: 700; color: var(--slate-700);">
-              O pega aquí tu listado de cédulas:
+              Listado de cédulas a calificar:
             </label>
             <span id="bulk-counter-live" style="font-size: 0.8rem; font-weight: 700; color: var(--primary);">
               0 cédulas detectadas
             </span>
           </div>
-          <textarea id="bulk-textarea" class="bulk-textarea" style="height: 110px;" placeholder="Pega aquí las 4000 cédulas (desde Excel, Word o Bloc de notas)..."></textarea>
+          <textarea id="bulk-textarea" class="bulk-textarea" style="height: 120px;" placeholder="Sube un archivo o pega aquí tu listado de cédulas..."></textarea>
         </div>
 
         <div style="display: flex; gap: 10px; margin-top: 14px;">
@@ -288,9 +312,9 @@
   </main>
 
   <footer class="app-footer">
-    <p>Calificador de Salud IESS / MSP • <strong>Versión 1.4.2</strong></p>
+    <p>Calificador de Salud IESS / MSP • <strong>Versión 1.4.3</strong></p>
   </footer>
 
-  <script src="/js/app.js?v=1.4.2"></script>
+  <script src="/js/app.js?v=1.4.3"></script>
 </body>
 </html>

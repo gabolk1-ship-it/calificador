@@ -41,17 +41,17 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v1.4.2-apk
-        name: "Calificador Android v1.4.2 (APK)"
+        tag_name: v1.4.3-apk
+        name: "Calificador Android v1.4.3 (APK)"
         body: |
-          ### Calificador de Derecho a Salud (IESS / MSP) - Android APK v1.4.2
-          - Corrección definitiva de apertura de cámara: arranque universal con constraints nativas para evitar cierres inmediatos.
-          - Escáner óptico optimizado para celulares: autoenfoque continuo HD, controles de zoom rápido (1x, 1.5x, 2x, 3x) y selector de lentes traseros (evita apertura en gran angular lejano).
+          ### Calificador de Derecho a Salud (IESS / MSP) - Android APK v1.4.3
+          - Carga masiva sin límites: soporte completo para archivos grandes (>2,300 filas) sin recortar a cédulas únicas.
+          - Modo Planilla Completa 1 a 1: preserva cada fila del archivo original para conciliación y auditoría médica.
+          - Memoria inteligente (Caché local): consulta al IESS una sola vez por paciente único y califica las filas repetidas en 0 milisegundos.
+          - Soporte para archivos con macros Excel (.xlsm) y libros con múltiples hojas con selector interactivo.
+          - Escáner óptico optimizado para celulares: autoenfoque continuo HD, controles de zoom rápido (1x, 1.5x, 2x, 3x) y selector de lentes traseros.
           - Decodificación robusta para códigos PDF417 de alta densidad y códigos Code 39 / Code 128 de cédulas tradicionales.
-          - Adaptación nativa al viewport móvil en WebView y diseño de cámara responsivo sin franjas reducidas.
-          - Selector nativo de archivos para Carga Masiva (Excel, CSV, TXT) desde cualquier carpeta del teléfono.
-          - Lector Externo de Código de Barras (USB / Bluetooth / Pistola).
-          - Detección y lectura de Cédula por NFC (ISO-DEP / ICAO 9303).
+          - Lector Externo de Código de Barras (USB / Bluetooth / Pistola) y lectura NFC (ISO-DEP / ICAO 9303).
         files: android/app/build/outputs/apk/debug/*.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

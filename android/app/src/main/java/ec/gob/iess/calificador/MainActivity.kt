@@ -396,7 +396,7 @@ class MainActivity : AppCompatActivity(), NfcAdapter.ReaderCallback {
 
         @JavascriptInterface
         fun getAppVersion(): String {
-            return "1.4.2"
+            return "1.4.3"
         }
 
         @JavascriptInterface
