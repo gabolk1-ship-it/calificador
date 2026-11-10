@@ -138,7 +138,13 @@ function actualizarContadorLive() {
       items.push(parsed);
     } else {
       const digits = line.replace(/\D/g, '');
-      if (digits.length > 0) items.push({ cedula: digits, fecha: null });
+      if (digits.length === 9 || digits.length === 10) {
+        const norm = normalizarCedula(digits);
+        if (validarCedulaCliente(norm)) {
+          items.push({ cedula: norm, fecha: null });
+        }
+      }
+      // Se omiten automáticamente cabeceras o filas que son solo texto sin cédula
     }
   });
 
@@ -250,7 +256,6 @@ function validarCedulaCliente(cedula) {
 
   const prov = parseInt(limpia.substring(0, 2), 10);
   if ((prov < 1 || prov > 24) && prov !== 30) return false;
-  if (parseInt(limpia[2], 10) >= 6) return false;
 
   const coef = [2, 1, 2, 1, 2, 1, 2, 1, 2];
   let sum = 0;
@@ -1586,9 +1591,13 @@ btnStartBulk.addEventListener('click', async () => {
       items.push(parsed);
     } else {
       const digits = line.replace(/\D/g, '');
-      if (digits.length > 0) {
-        items.push({ cedula: digits, fecha: null });
+      if (digits.length === 9 || digits.length === 10) {
+        const norm = normalizarCedula(digits);
+        if (validarCedulaCliente(norm)) {
+          items.push({ cedula: norm, fecha: null });
+        }
       }
+      // Se omiten automáticamente cabeceras o filas que son solo texto sin cédula
     }
   });
 

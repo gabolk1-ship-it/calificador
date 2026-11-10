@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert';
 import { validarCedulaEcuador } from '../lib/cedulaValidator.js';
 import { solveAltcha } from '../lib/altchaSolver.js';
@@ -11,11 +11,17 @@ test('Validador de Cédula: detecta formato incorrecto', () => {
 });
 
 test('Validador de Cédula: algoritmo Módulo 10 funciona con cédulas válidas', () => {
-  // Cédula válida de prueba en Ecuador (Pichincha)
+  // Cédula tradicional (Pichincha)
   const cedulaValida = '1710034065';
   const res = validarCedulaEcuador(cedulaValida);
   assert.strictEqual(res.valido, true);
   assert.strictEqual(res.provincia, 17);
+
+  // Cédula de series nuevas (3er dígito >= 6 emitidas por Registro Civil para menores)
+  const cedulaNueva = '1761031838';
+  const resNueva = validarCedulaEcuador(cedulaNueva);
+  assert.strictEqual(resNueva.valido, true);
+  assert.strictEqual(resNueva.provincia, 17);
 });
 
 test('Solucionador Altcha: resuelve reto SHA-256 en menos de 200ms', () => {
