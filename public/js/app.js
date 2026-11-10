@@ -1711,7 +1711,7 @@ btnStartBulk.addEventListener('click', async () => {
             codigoSeguro: segInfo.codigo,
             badgeSeguroClass: segInfo.badgeClass,
             subsistema: segInfo.subsistema,
-            afiliacion: (data.iess && data.iess.tipoAfiliacion) || 'Seguro General',
+            afiliacion: (data.iess && data.iess.tipoAfiliacion) || '---',
             fechaCalificada: data.fechaCalificada || fechaACalificar || 'Hoy',
             observacion: (data.iess && data.iess.observacion) || 'Sin observación'
           };
@@ -1792,10 +1792,11 @@ function agregarFilaTabla(row) {
     <td><strong>${row.cedula}</strong></td>
     <td>${row.paciente}</td>
     <td><span class="${badgeClass}">${row.estado}</span></td>
-    <td><strong style="color: ${colorTextoSeguro}; font-size: 0.82rem;">${row.tipoSeguro || row.afiliacion}</strong></td>
     <td><span class="${row.badgeSeguroClass || 'badge-seguro sg'}">${row.codigoSeguro || '---'}</span></td>
+    <td><strong style="color: ${colorTextoSeguro}; font-size: 0.82rem;">${row.tipoSeguro || row.afiliacion}</strong></td>
+    <td><span style="font-size: 0.82rem; font-weight: 600; color: #1e3a8a;">${row.afiliacion || '---'}</span></td>
+    <td><span style="font-size: 0.82rem; color: #166534; font-weight: 500;">${row.observacion || '---'}</span></td>
     <td><small style="font-weight: 600; color: var(--slate-700);">${row.fechaCalificada || 'Hoy'}</small></td>
-    <td><small>${row.observacion}</small></td>
   `;
 
   bulkTableBody.appendChild(tr);
@@ -1813,17 +1814,34 @@ btnExportExcel.addEventListener('click', () => {
     'Cédula': r.cedula,
     'Apellidos y Nombres': r.paciente,
     'Estado Calificación': r.estado,
-    'Tipo de Seguro': r.tipoSeguro || r.afiliacion,
     'Código Seguro': r.codigoSeguro || '---',
-    'Subsistema': r.subsistema || 'IESS',
-    'Detalle Afiliación IESS': r.afiliacion,
+    'Tipo de Seguro': r.tipoSeguro || r.afiliacion,
+    'Tipo de Afiliación': r.afiliacion || '---',
+    'Observación': r.observacion || '---',
     'Fecha Calificada': r.fechaCalificada || 'Hoy',
-    'Observación IESS': r.observacion,
+    'Subsistema': r.subsistema || 'IESS',
     'Contingencia': 'Enfermedad (14)',
     'Fecha de Reporte': new Date().toLocaleDateString('es-EC')
   }));
 
   const ws = XLSX.utils.json_to_sheet(dataExport);
+
+  // Anchos de columna óptimos para que ningún texto se corte al abrir en Excel
+  ws['!cols'] = [
+    { wch: 6 },   // N°
+    { wch: 14 },  // Cédula
+    { wch: 38 },  // Apellidos y Nombres
+    { wch: 18 },  // Estado Calificación
+    { wch: 14 },  // Código Seguro (CA, CB, SG)
+    { wch: 48 },  // Tipo de Seguro
+    { wch: 32 },  // Tipo de Afiliación (ej. Afiliado Seguro Campesino)
+    { wch: 45 },  // Observación (ej. Cédula Registrada con Derecho)
+    { wch: 16 },  // Fecha Calificada
+    { wch: 30 },  // Subsistema
+    { wch: 18 },  // Contingencia
+    { wch: 16 }   // Fecha de Reporte
+  ];
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Calificación IESS');
 
