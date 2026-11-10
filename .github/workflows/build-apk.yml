@@ -41,17 +41,16 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: success()
       with:
-        tag_name: v1.4.3-apk
-        name: "Calificador Android v1.4.3 (APK)"
+        tag_name: v1.4.4-apk
+        name: "Calificador Android v1.4.4 (APK)"
         body: |
-          ### Calificador de Derecho a Salud (IESS / MSP) - Android APK v1.4.3
-          - Carga masiva sin límites: soporte completo para archivos grandes (>2,300 filas) sin recortar a cédulas únicas.
-          - Modo Planilla Completa 1 a 1: preserva cada fila del archivo original para conciliación y auditoría médica.
-          - Memoria inteligente (Caché local): consulta al IESS una sola vez por paciente único y califica las filas repetidas en 0 milisegundos.
-          - Soporte para archivos con macros Excel (.xlsm) y libros con múltiples hojas con selector interactivo.
-          - Escáner óptico optimizado para celulares: autoenfoque continuo HD, controles de zoom rápido (1x, 1.5x, 2x, 3x) y selector de lentes traseros.
-          - Decodificación robusta para códigos PDF417 de alta densidad y códigos Code 39 / Code 128 de cédulas tradicionales.
-          - Lector Externo de Código de Barras (USB / Bluetooth / Pistola) y lectura NFC (ISO-DEP / ICAO 9303).
+          ### Calificador de Derecho a Salud (IESS / MSP) - Android APK v1.4.4
+          - Calificación por Fecha: Permite auditar y verificar derechos a fechas pasadas de atención tanto en modo individual como masivo.
+          - Detección automática de columnas de fecha (Excel, CSV) y formato con fecha por fila (ej. `1710034065, 15/05/2024`).
+          - Selector global de fecha para lotes masivos con opción de calificar al día de hoy.
+          - Modo de pacientes únicos predeterminado con desglose estadístico claro del total de filas y duplicados removidos.
+          - Clasificación detallada del Seguro: CA (Jefe de familia / Titular Campesino), CB (Beneficiario Campesino), JUB-SSC, SG.
+          - Exportación Excel con columna 'Fecha Calificada'.
         files: android/app/build/outputs/apk/debug/*.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

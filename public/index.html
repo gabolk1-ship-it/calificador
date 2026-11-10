@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/css/style.css?v=1.4.3">
+  <link rel="stylesheet" href="/css/style.css?v=1.4.4">
   <!-- Escáner QR / Barcode -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <!-- Lector y Exportador Excel XLSX / CSV -->
@@ -21,7 +21,7 @@
       <span>🏥</span> Calificador de Salud
     </h1>
     <div class="header-badges">
-      <span class="badge-version" id="app-version-badge">v1.4.3</span>
+      <span class="badge-version" id="app-version-badge">v1.4.4</span>
       <span class="badge-contingencia">Enfermedad (Cód. 14)</span>
     </div>
   </header>
@@ -115,6 +115,16 @@
               Consultar
             </button>
           </div>
+          <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+            <label for="single-date-input" style="font-size: 0.82rem; font-weight: 600; color: var(--slate-700);">
+              📅 Fecha de atención (opcional):
+            </label>
+            <input 
+              type="date" 
+              id="single-date-input" 
+              style="padding: 6px 10px; border: 1.5px solid var(--slate-300); border-radius: 8px; font-size: 0.85rem; color: var(--slate-800); background: white;"
+            >
+          </div>
           <div id="validation-hint" class="validation-hint"></div>
         </div>
       </section>
@@ -149,6 +159,10 @@
           <div class="detail-row">
             <span class="detail-label">Código / Subsistema:</span>
             <span class="detail-value" id="res-codigo-seguro">---</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Fecha Evaluada:</span>
+            <span class="detail-value" id="res-fecha-calificada" style="font-weight: 600;">Hoy</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">Detalle Afiliación:</span>
@@ -220,32 +234,49 @@
           </button>
         </div>
 
-        <!-- Selector de Modo de Procesamiento (Planilla completa 1 a 1 vs Pacientes únicos) -->
+        <!-- Selector de Modo de Procesamiento (Pacientes únicos vs Planilla completa) -->
         <div id="bulk-mode-container" style="margin-bottom: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;">
           <div style="font-size: 0.82rem; font-weight: 700; color: var(--slate-800); margin-bottom: 6px;">
             Modo de Calificación Masiva:
           </div>
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin-bottom: 6px; font-size: 0.82rem; color: var(--slate-800);">
-            <input type="radio" name="bulk-mode" id="mode-all-rows" value="all" checked style="margin-top: 2px;">
-            <span><strong>Todas las filas (Planilla completa 1 a 1):</strong> Mantiene cada registro del archivo original tal cual (ej. 2,347 filas). <em>Usa memoria inteligente para calificar en segundos sin saturar al IESS.</em></span>
+            <input type="radio" name="bulk-mode" id="mode-unique-only" value="unique" checked style="margin-top: 2px;">
+            <span><strong>Solo pacientes únicos (Sin filas duplicadas):</strong> Califica una sola vez a cada paciente aunque tenga varias atenciones en la planilla (ej. 360 pacientes). <em>Elimina registros repetidos para ahorrar tiempo.</em></span>
           </label>
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 0.82rem; color: var(--slate-700);">
-            <input type="radio" name="bulk-mode" id="mode-unique-only" value="unique" style="margin-top: 2px;">
-            <span><strong>Solo pacientes únicos (Sin filas duplicadas):</strong> Califica una sola vez a cada paciente aunque tenga varias atenciones (ej. 360 pacientes).</span>
+            <input type="radio" name="bulk-mode" id="mode-all-rows" value="all" style="margin-top: 2px;">
+            <span><strong>Todas las filas (Planilla completa 1 a 1):</strong> Mantiene cada fila del archivo tal cual (ej. 2,347 filas). <em>Usa memoria inteligente para calificar en segundos.</em></span>
           </label>
+        </div>
+
+        <!-- Selector de Fecha Global para el Lote -->
+        <div id="bulk-date-container" style="margin-bottom: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
+          <div>
+            <label for="bulk-batch-date" style="font-size: 0.84rem; font-weight: 700; color: var(--slate-800); display: block;">
+              📅 Fecha de Calificación para el Lote (Opcional):
+            </label>
+            <span style="font-size: 0.78rem; color: var(--slate-600);">
+              Si tus filas no traen fecha, se usará esta fecha (dejar vacío para calificar al día de hoy)
+            </span>
+          </div>
+          <input 
+            type="date" 
+            id="bulk-batch-date" 
+            style="padding: 7px 12px; border: 1.5px solid var(--slate-300); border-radius: 8px; font-size: 0.88rem; font-weight: 600; color: var(--slate-800); background: white;"
+          >
         </div>
 
         <!-- O pegar lista manual -->
         <div style="margin-top: 14px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <label for="bulk-textarea" style="font-size: 0.82rem; font-weight: 700; color: var(--slate-700);">
-              Listado de cédulas a calificar:
+              Listado de cédulas (con o sin fecha):
             </label>
             <span id="bulk-counter-live" style="font-size: 0.8rem; font-weight: 700; color: var(--primary);">
               0 cédulas detectadas
             </span>
           </div>
-          <textarea id="bulk-textarea" class="bulk-textarea" style="height: 120px;" placeholder="Sube un archivo o pega aquí tu listado de cédulas..."></textarea>
+          <textarea id="bulk-textarea" class="bulk-textarea" style="height: 120px;" placeholder="Sube un archivo o pega aquí tu listado de cédulas (ej. 1710034065 o 1710034065, 15/05/2024)..."></textarea>
         </div>
 
         <div style="display: flex; gap: 10px; margin-top: 14px;">
@@ -307,6 +338,7 @@
                 <th>Estado</th>
                 <th>Tipo de Seguro</th>
                 <th>Código</th>
+                <th>Fecha Calificada</th>
                 <th>Observación</th>
               </tr>
             </thead>
@@ -321,9 +353,9 @@
   </main>
 
   <footer class="app-footer">
-    <p>Calificador de Salud IESS / MSP • <strong>Versión 1.4.3</strong></p>
+    <p>Calificador de Salud IESS / MSP • <strong>Versión 1.4.4</strong></p>
   </footer>
 
-  <script src="/js/app.js?v=1.4.3"></script>
+  <script src="/js/app.js?v=1.4.4"></script>
 </body>
 </html>

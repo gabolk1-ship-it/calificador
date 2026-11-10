@@ -35,9 +35,11 @@ const resCedula = document.getElementById('res-cedula');
 const resNombres = document.getElementById('res-nombres');
 const resTipoSeguro = document.getElementById('res-tipo-seguro');
 const resCodigoSeguro = document.getElementById('res-codigo-seguro');
+const resFechaCalificada = document.getElementById('res-fecha-calificada');
 const resAfiliacion = document.getElementById('res-afiliacion');
 const resTiempo = document.getElementById('res-tiempo');
 const mspDesc = document.getElementById('msp-desc');
+const singleDateInput = document.getElementById('single-date-input');
 
 // Elementos Modo Masivo
 const dropzone = document.getElementById('dropzone');
@@ -46,12 +48,80 @@ const bulkTextarea = document.getElementById('bulk-textarea');
 const bulkCounterLive = document.getElementById('bulk-counter-live');
 const modeAllRows = document.getElementById('mode-all-rows');
 const modeUniqueOnly = document.getElementById('mode-unique-only');
+const bulkBatchDate = document.getElementById('bulk-batch-date');
 const sheetSelectorContainer = document.getElementById('sheet-selector-container');
 const sheetSelect = document.getElementById('sheet-select');
 
-// Almacén en memoria del archivo cargado para alternar entre "Todas las filas" y "Únicas" sin re-leer
-let archivoCargadoDatos = null; // { todas: [], unicas: [], nombre: '', cerosRecuperados: 0 }
+// Almacén en memoria del archivo cargado para alternar entre "Únicas" y "Todas las filas"
+let archivoCargadoDatos = null; // { totalOriginal, duplicadosOriginal, todas: [], unicas: [], nombre: '', cerosRecuperados: 0 }
 let workbookSheetsMap = null;   // Map: sheetName -> { todas: [], unicas: [], ceros: 0 }
+
+/**
+ * Normaliza cualquier formato de fecha a DD/MM/YYYY:
+ * - Serial Excel (ej. 45427 -> 15/05/2024)
+ * - ISO / YYYY-MM-DD
+ * - DD/MM/YYYY o DD-MM-YYYY
+ * - Date object nativo
+ */
+function parsearFechaGenerica(val) {
+  if (val === null || val === undefined || val === '') return null;
+
+  // Si es un objeto Date nativo
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    const d = String(val.getDate()).padStart(2, '0');
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const y = val.getFullYear();
+    return `${d}/${m}/${y}`;
+  }
+
+  // Si es un número serial de fecha de Excel (ej. 45427 -> 15/05/2024)
+  if (typeof val === 'number' && val > 20000 && val < 80000) {
+    if (window.XLSX && window.XLSX.SSF) {
+      try {
+        const d = window.XLSX.SSF.parse_date_code(val);
+        if (d && d.d && d.m && d.y) {
+          return `${String(d.d).padStart(2, '0')}/${String(d.m).padStart(2, '0')}/${d.y}`;
+        }
+      } catch (_) {}
+    }
+    const epoch = new Date((val - (25567 + 2)) * 86400 * 1000);
+    if (!isNaN(epoch.getTime())) {
+      const d = String(epoch.getUTCDate()).padStart(2, '0');
+      const m = String(epoch.getUTCMonth() + 1).padStart(2, '0');
+      const y = epoch.getUTCFullYear();
+      return `${d}/${m}/${y}`;
+    }
+  }
+
+  const str = String(val).trim();
+  if (!str) return null;
+
+  // DD/MM/YYYY o DD-MM-YYYY
+  const dmy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmy) {
+    const d = String(dmy[1]).padStart(2, '0');
+    const m = String(dmy[2]).padStart(2, '0');
+    const y = dmy[3];
+    return `${d}/${m}/${y}`;
+  }
+
+  // YYYY-MM-DD o YYYY/MM/DD
+  const ymd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymd) {
+    const y = ymd[1];
+    const m = String(ymd[2]).padStart(2, '0');
+    const d = String(ymd[3]).padStart(2, '0');
+    return `${d}/${m}/${y}`;
+  }
+
+  return null;
+}
+
+function formatItemParaTextarea(item) {
+  if (!item) return '';
+  if (typeof item === 'string') return item;
+  return item.fecha ? `${item.cedula}, ${item.fecha}` : item.cedula;
+}
 
 function actualizarContadorLive() {
   if (!bulkCounterLive) return;
@@ -61,38 +131,38 @@ function actualizarContadorLive() {
     return;
   }
   const lines = raw.split(/[\r\n]+/).map(t => t.trim()).filter(Boolean);
-  const cedulas = [];
+  const items = [];
   lines.forEach(line => {
-    // Si la línea tiene formato separado por comas o tabs, buscar la cédula
-    const parts = line.split(/[,;\t]/).map(p => p.trim());
-    let found = false;
-    for (const p of parts) {
-      const digits = p.replace(/\D/g, '');
-      if (digits.length === 9 || digits.length === 10) {
-        cedulas.push(normalizarCedula(digits));
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
+    const parsed = extraerCedulaYFechaDeLinea(line);
+    if (parsed) {
+      items.push(parsed);
+    } else {
       const digits = line.replace(/\D/g, '');
-      if (digits.length > 0) cedulas.push(digits);
+      if (digits.length > 0) items.push({ cedula: digits, fecha: null });
     }
   });
 
-  const total = cedulas.length;
-  const unicas = new Set(cedulas).size;
-  if (total === unicas) {
-    bulkCounterLive.textContent = `${total} cédulas detectadas (listas para calificar)`;
+  const total = items.length;
+  const unicasSet = new Set(items.map(it => it.cedula));
+  const unicas = unicasSet.size;
+  const duplicados = total - unicas;
+
+  if (archivoCargadoDatos && modeUniqueOnly && modeUniqueOnly.checked) {
+    bulkCounterLive.textContent = `${total.toLocaleString()} pacientes únicos (de ${archivoCargadoDatos.totalOriginal.toLocaleString()} filas originales - ${archivoCargadoDatos.duplicadosOriginal.toLocaleString()} duplicados removidos)`;
+  } else if (archivoCargadoDatos && modeAllRows && modeAllRows.checked) {
+    bulkCounterLive.textContent = `${total.toLocaleString()} filas en total (${unicas.toLocaleString()} pacientes únicos - memoria inteligente activa)`;
+  } else if (total === unicas) {
+    bulkCounterLive.textContent = `${total.toLocaleString()} pacientes únicos (sin duplicados)`;
   } else {
-    bulkCounterLive.textContent = `${total} filas detectadas (${unicas} pacientes únicos)`;
+    bulkCounterLive.textContent = `${total.toLocaleString()} filas ingresadas (${unicas.toLocaleString()} pacientes únicos - ${duplicados.toLocaleString()} duplicados)`;
   }
 }
 
 function actualizarTextareaPorModo() {
   if (!archivoCargadoDatos) return;
   const esUnicas = modeUniqueOnly && modeUniqueOnly.checked;
-  bulkTextarea.value = (esUnicas ? archivoCargadoDatos.unicas : archivoCargadoDatos.todas).join('\n');
+  const lista = esUnicas ? archivoCargadoDatos.unicas : archivoCargadoDatos.todas;
+  bulkTextarea.value = lista.map(formatItemParaTextarea).join('\n');
   actualizarContadorLive();
 }
 
@@ -110,15 +180,25 @@ if (sheetSelect) {
         todas.push(...info.todas);
         ceros += info.ceros;
       });
+      const unicasMap = new Map();
+      todas.forEach(it => {
+        if (!unicasMap.has(it.cedula)) unicasMap.set(it.cedula, it);
+        else if (!unicasMap.get(it.cedula).fecha && it.fecha) unicasMap.set(it.cedula, it);
+      });
+      const unicas = Array.from(unicasMap.values());
       archivoCargadoDatos = {
+        totalOriginal: todas.length,
+        duplicadosOriginal: todas.length - unicas.length,
         todas,
-        unicas: [...new Set(todas)],
+        unicas,
         nombre: archivoCargadoDatos ? archivoCargadoDatos.nombre : 'Excel',
         cerosRecuperados: ceros
       };
     } else if (workbookSheetsMap.has(sel)) {
       const info = workbookSheetsMap.get(sel);
       archivoCargadoDatos = {
+        totalOriginal: info.todas.length,
+        duplicadosOriginal: info.todas.length - info.unicas.length,
         todas: info.todas,
         unicas: info.unicas,
         nombre: `${archivoCargadoDatos ? archivoCargadoDatos.nombre : 'Excel'} [${sel}]`,
@@ -216,6 +296,59 @@ function extraerCedulaDeTexto(texto) {
   }
 
   return null;
+}
+
+/**
+ * Extrae cédula y fecha opcional de una línea de texto (ej. "1710034065, 15/05/2024" o "1708683873 2024-05-15")
+ */
+function extraerCedulaYFechaDeLinea(linea) {
+  if (!linea) return null;
+  const str = String(linea).trim();
+  if (!str) return null;
+
+  // Separar tokens por comas, punto y comas, tabs o barras verticales
+  const tokens = str.split(/[,;\t|]+/).map(t => t.trim()).filter(Boolean);
+
+  let cedula = null;
+  let fecha = null;
+
+  for (const tok of tokens) {
+    if (!fecha) {
+      const fCand = parsearFechaGenerica(tok);
+      if (fCand) {
+        fecha = fCand;
+        continue;
+      }
+    }
+    if (!cedula) {
+      const cand = extraerCedulaDeTexto(tok);
+      if (cand) {
+        cedula = cand;
+        continue;
+      }
+    }
+  }
+
+  // Si no se encontró cédula por tokens, buscar en la línea completa
+  if (!cedula) {
+    cedula = extraerCedulaDeTexto(str);
+  }
+
+  // Si no se encontró fecha por tokens, buscar patrones de fecha en la línea completa
+  if (!fecha) {
+    const matchDmy = str.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\b/);
+    if (matchDmy) {
+      fecha = parsearFechaGenerica(matchDmy[0]);
+    } else {
+      const matchYmd = str.match(/\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/);
+      if (matchYmd) {
+        fecha = parsearFechaGenerica(matchYmd[0]);
+      }
+    }
+  }
+
+  if (!cedula) return null;
+  return { cedula, fecha };
 }
 
 // ==========================================
@@ -827,7 +960,14 @@ async function ejecutarConsultaIndividual(cedula) {
   resultContainer.style.display = 'none';
 
   try {
-    const res = await fetch(`/api/calificar?cedula=${cedula}`);
+    let fechaQuery = '';
+    if (singleDateInput && singleDateInput.value) {
+      const fNorm = parsearFechaGenerica(singleDateInput.value);
+      if (fNorm) {
+        fechaQuery = `&fecha=${encodeURIComponent(fNorm)}`;
+      }
+    }
+    const res = await fetch(`/api/calificar?cedula=${cedula}${fechaQuery}`);
     const data = await res.json();
     loader.style.display = 'none';
     mostrarResultadoIndividual(data);
@@ -977,6 +1117,10 @@ function mostrarResultadoIndividual(data) {
   if (resCodigoSeguro) {
     resCodigoSeguro.innerHTML = `<span class="${segInfo.badgeClass}">${segInfo.codigo}</span> <strong style="color: var(--slate-700); margin-left: 6px;">${segInfo.subsistema}</strong>`;
   }
+  if (resFechaCalificada) {
+    const fInput = singleDateInput && singleDateInput.value ? parsearFechaGenerica(singleDateInput.value) : null;
+    resFechaCalificada.textContent = data.fechaCalificada || fInput || 'Al día de hoy';
+  }
 
   if (isAcred) {
     statusBanner.className = 'status-banner acreditado';
@@ -1007,6 +1151,7 @@ function mostrarResultadoIndividual(data) {
 btnNuevaConsulta.addEventListener('click', () => {
   resultContainer.style.display = 'none';
   cedulaInput.value = '';
+  if (singleDateInput) singleDateInput.value = '';
   validationHint.textContent = '';
   btnConsultar.disabled = true;
   cedulaInput.focus();
@@ -1076,9 +1221,20 @@ if (btnLoadDatosmis) {
         return;
       }
 
+      const rawTodas = data.todasCedulas || data.cedulas || [];
+      const todas = rawTodas.map(c => ({ cedula: c, fecha: null }));
+      const unicasMap = new Map();
+      todas.forEach(it => {
+        if (!unicasMap.has(it.cedula)) unicasMap.set(it.cedula, it);
+      });
+      const unicas = Array.from(unicasMap.values());
+      const duplicadosRemovidos = todas.length - unicas.length;
+
       archivoCargadoDatos = {
-        todas: data.todasCedulas || data.cedulas,
-        unicas: data.cedulas,
+        totalOriginal: todas.length,
+        duplicadosOriginal: duplicadosRemovidos,
+        todas,
+        unicas,
         nombre: data.archivo,
         cerosRecuperados: data.conCeroRecuperado
       };
@@ -1088,13 +1244,13 @@ if (btnLoadDatosmis) {
 
       alert(`¡Archivo cargado automáticamente desde C:\\DATOSMIS!\n\n` +
             `• Archivo leído: ${data.archivo}\n` +
-            `• Total registros de atención: ${(data.totalAtenciones || data.cedulas.length).toLocaleString()} filas\n` +
-            `• Pacientes únicos: ${data.unicasCount.toLocaleString()}\n` +
+            `• Total registros de atención: ${todas.length.toLocaleString()} filas\n` +
+            `• Pacientes únicos: ${unicas.length.toLocaleString()} (${duplicadosRemovidos.toLocaleString()} duplicados removidos)\n` +
             `• Cédulas con '0' inicial restaurado: ${data.conCeroRecuperado}\n\n` +
-            `Las filas están cargadas en pantalla listas para calificar manteniendo la planilla 1 a 1.`);
+            `Se han cargado los ${unicas.length.toLocaleString()} pacientes únicos listos para calificar.`);
 
       btnLoadDatosmis.disabled = false;
-      btnLoadDatosmis.innerHTML = `<span>✓ Cargado: ${data.archivo} (${(data.totalAtenciones || data.unicasCount).toLocaleString()} filas)</span>`;
+      btnLoadDatosmis.innerHTML = `<span>✓ Cargado: ${data.archivo} (${unicas.length.toLocaleString()} únicos de ${todas.length.toLocaleString()})</span>`;
     } catch (err) {
       alert(`No se pudo cargar desde el servidor local: ${err.message}`);
       btnLoadDatosmis.disabled = false;
@@ -1122,15 +1278,26 @@ function procesarArchivoSeleccionado(file) {
           const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
           if (!rows || rows.length === 0) return;
 
-          // Buscar columna de cédula si la primera fila tiene cabecera
-          let colIdx = -1;
+          // Buscar columnas de cédula y fecha si la primera fila tiene cabecera
+          let colCedulaIdx = -1;
+          let colFechaIdx = -1;
+
           if (Array.isArray(rows[0])) {
             const headers = rows[0].map(h => String(h || '').trim().toUpperCase());
-            const posiblesHeaders = ['NRO_DOCUMENTO', 'NUMERO_DOCUMENTO', 'CEDULA', 'IDENTIFICACION', 'DOCUMENTO', 'NRO_DOC', 'PACIENTE_CEDULA', 'CEDULA_PACIENTE'];
-            for (const ph of posiblesHeaders) {
+            const posiblesHeadersCedula = ['NRO_DOCUMENTO', 'NUMERO_DOCUMENTO', 'CEDULA', 'IDENTIFICACION', 'DOCUMENTO', 'NRO_DOC', 'PACIENTE_CEDULA', 'CEDULA_PACIENTE', 'CI'];
+            for (const ph of posiblesHeadersCedula) {
               const idx = headers.indexOf(ph);
               if (idx !== -1) {
-                colIdx = idx;
+                colCedulaIdx = idx;
+                break;
+              }
+            }
+
+            const posiblesHeadersFecha = ['FECHA', 'FECHA_ATENCION', 'FECHA ATENCION', 'FEC_ATENCION', 'FECHA FORMULARIO 053', 'FECHA_FORMULARIO_053', 'FECHA_CONSULTA', 'FECHA CONSULTA', 'FEC_CONSULTA', 'FECHA_CITA', 'FECHA CITA', 'FECHA_EMISION', 'FECHA EMISION', 'FEC_REGISTRO', 'FECHA REGISTRO'];
+            for (const ph of posiblesHeadersFecha) {
+              const idx = headers.indexOf(ph);
+              if (idx !== -1) {
+                colFechaIdx = idx;
                 break;
               }
             }
@@ -1141,34 +1308,74 @@ function procesarArchivoSeleccionado(file) {
 
           rows.forEach((r, rIdx) => {
             if (!Array.isArray(r)) return;
-            if (colIdx !== -1) {
+            if (colCedulaIdx !== -1) {
               if (rIdx === 0) return; // Saltar cabecera
-              const cell = r[colIdx];
-              if (cell !== null && cell !== undefined) {
-                const digits = String(cell).replace(/\D/g, '');
+              const cellCedula = r[colCedulaIdx];
+              if (cellCedula !== null && cellCedula !== undefined) {
+                const digits = String(cellCedula).replace(/\D/g, '');
                 if (digits.length === 9 || digits.length === 10) {
                   const norm = normalizarCedula(digits);
                   if (digits.length === 9) corregidasHoja++;
-                  cedulasHoja.push(norm);
+
+                  // Extraer fecha si existe en columna específica o en otra celda
+                  let fechaRow = null;
+                  if (colFechaIdx !== -1 && r[colFechaIdx] !== null && r[colFechaIdx] !== undefined) {
+                    fechaRow = parsearFechaGenerica(r[colFechaIdx]);
+                  }
+                  if (!fechaRow) {
+                    for (let c = 0; c < r.length; c++) {
+                      if (c === colCedulaIdx) continue;
+                      const fCand = parsearFechaGenerica(r[c]);
+                      if (fCand) {
+                        fechaRow = fCand;
+                        break;
+                      }
+                    }
+                  }
+
+                  cedulasHoja.push({ cedula: norm, fecha: fechaRow });
                 }
               }
             } else {
-              // Sin encabezado específico (ej. CB CA.xlsx): escanear fila y tomar la primera cédula de la fila
+              // Sin encabezado específico (ej. CB CA.xlsx): escanear fila
+              let normCedula = null;
+              let fechaRow = null;
+
               for (const cell of r) {
                 if (cell === null || cell === undefined) continue;
-                const digits = String(cell).replace(/\D/g, '');
-                if (digits.length === 9 || digits.length === 10) {
-                  const norm = normalizarCedula(digits);
-                  if (digits.length === 9) corregidasHoja++;
-                  cedulasHoja.push(norm);
-                  break; // 1 cédula por fila de atención
+                if (!normCedula) {
+                  const digits = String(cell).replace(/\D/g, '');
+                  if (digits.length === 9 || digits.length === 10) {
+                    normCedula = normalizarCedula(digits);
+                    if (digits.length === 9) corregidasHoja++;
+                    continue;
+                  }
                 }
+                if (!fechaRow) {
+                  const fCand = parsearFechaGenerica(cell);
+                  if (fCand) {
+                    fechaRow = fCand;
+                  }
+                }
+              }
+
+              if (normCedula) {
+                cedulasHoja.push({ cedula: normCedula, fecha: fechaRow });
               }
             }
           });
 
           if (cedulasHoja.length > 0) {
-            const unicasHoja = [...new Set(cedulasHoja)];
+            const unicasMap = new Map();
+            cedulasHoja.forEach(item => {
+              if (!unicasMap.has(item.cedula)) {
+                unicasMap.set(item.cedula, item);
+              } else if (!unicasMap.get(item.cedula).fecha && item.fecha) {
+                unicasMap.set(item.cedula, item);
+              }
+            });
+            const unicasHoja = Array.from(unicasMap.values());
+
             workbookSheetsMap.set(sheetName, {
               todas: cedulasHoja,
               unicas: unicasHoja,
@@ -1214,9 +1421,18 @@ function procesarArchivoSeleccionado(file) {
             cerosTotales += s.ceros;
           });
 
+          const unicasMap = new Map();
+          todasCombinadas.forEach(it => {
+            if (!unicasMap.has(it.cedula)) unicasMap.set(it.cedula, it);
+            else if (!unicasMap.get(it.cedula).fecha && it.fecha) unicasMap.set(it.cedula, it);
+          });
+          const unicasCombinadas = Array.from(unicasMap.values());
+
           archivoCargadoDatos = {
+            totalOriginal: todasCombinadas.length,
+            duplicadosOriginal: todasCombinadas.length - unicasCombinadas.length,
             todas: todasCombinadas,
-            unicas: [...new Set(todasCombinadas)],
+            unicas: unicasCombinadas,
             nombre: file.name,
             cerosRecuperados: cerosTotales
           };
@@ -1226,6 +1442,8 @@ function procesarArchivoSeleccionado(file) {
           const s = sheetsConDatos[0];
           const info = workbookSheetsMap.get(s.name);
           archivoCargadoDatos = {
+            totalOriginal: info.todas.length,
+            duplicadosOriginal: info.todas.length - info.unicas.length,
             todas: info.todas,
             unicas: info.unicas,
             nombre: file.name,
@@ -1235,16 +1453,17 @@ function procesarArchivoSeleccionado(file) {
 
         actualizarTextareaPorModo();
 
-        const totalCargado = archivoCargadoDatos.todas.length;
+        const totalCargado = archivoCargadoDatos.totalOriginal;
         const unicosCargados = archivoCargadoDatos.unicas.length;
+        const duplicadosRemovidos = archivoCargadoDatos.duplicadosOriginal;
 
         alert(`¡Archivo cargado con éxito!\n\n` +
               `• Archivo: ${file.name}\n` +
               `• Total filas en planilla: ${totalCargado.toLocaleString()}\n` +
-              `• Pacientes únicos: ${unicosCargados.toLocaleString()}\n` +
+              `• Pacientes únicos: ${unicosCargados.toLocaleString()} (Se removieron ${duplicadosRemovidos.toLocaleString()} filas duplicadas)\n` +
               `• Cédulas restauradas con el '0' inicial: ${archivoCargadoDatos.cerosRecuperados}\n\n` +
-              `Se han cargado las ${totalCargado.toLocaleString()} filas completas 1 a 1 para que tu reporte de exportación cuadre exactamente con tu archivo original.\n` +
-              `Gracias a la memoria inteligente, las filas repetidas se calificarán al instante.`);
+              `Por defecto se cargaron los ${unicosCargados.toLocaleString()} pacientes únicos sin duplicados para calificar rápido.\n` +
+              `Si deseas calificar cada una de las ${totalCargado.toLocaleString()} filas completas, puedes seleccionar "Todas las filas" arriba.`);
       } catch (err) {
         alert(`Error al leer archivo Excel: ${err.message}`);
       }
@@ -1265,13 +1484,22 @@ function procesarArchivoSeleccionado(file) {
         const firstLine = rawLines[0];
         const delim = firstLine.includes(';') ? ';' : (firstLine.includes('\t') ? '\t' : ',');
         const headers = firstLine.split(delim).map(h => h.replace(/["']/g, '').trim().toUpperCase());
-        
+
         let colIndex = -1;
-        const posiblesHeaders = ['NRO_DOCUMENTO', 'NUMERO_DOCUMENTO', 'CEDULA', 'IDENTIFICACION', 'DOCUMENTO', 'NRO_DOC', 'PACIENTE_CEDULA'];
-        for (const ph of posiblesHeaders) {
+        let colFechaIndex = -1;
+        const posiblesHeadersCedula = ['NRO_DOCUMENTO', 'NUMERO_DOCUMENTO', 'CEDULA', 'IDENTIFICACION', 'DOCUMENTO', 'NRO_DOC', 'PACIENTE_CEDULA', 'CI'];
+        for (const ph of posiblesHeadersCedula) {
           const idx = headers.indexOf(ph);
           if (idx !== -1) {
             colIndex = idx;
+            break;
+          }
+        }
+        const posiblesHeadersFecha = ['FECHA', 'FECHA_ATENCION', 'FECHA ATENCION', 'FEC_ATENCION', 'FECHA FORMULARIO 053', 'FECHA_CONSULTA', 'FEC_CONSULTA'];
+        for (const ph of posiblesHeadersFecha) {
+          const idx = headers.indexOf(ph);
+          if (idx !== -1) {
+            colFechaIndex = idx;
             break;
           }
         }
@@ -1285,22 +1513,20 @@ function procesarArchivoSeleccionado(file) {
               if (digits.length === 9 || digits.length === 10) {
                 const normal = normalizarCedula(digits);
                 if (digits.length === 9) corregidasConCero++;
-                cedulasExtraidas.push(normal);
+                let fechaRow = null;
+                if (colFechaIndex !== -1 && cols.length > colFechaIndex) {
+                  fechaRow = parsearFechaGenerica(cols[colFechaIndex].replace(/["']/g, '').trim());
+                }
+                cedulasExtraidas.push({ cedula: normal, fecha: fechaRow });
               }
             }
           }
         } else {
           // Búsqueda genérica en cada línea
           rawLines.forEach(line => {
-            const tokens = line.split(/[;,\t]/);
-            for (const tok of tokens) {
-              const digits = tok.replace(/["']/g, '').trim().replace(/\D/g, '');
-              if (digits.length === 9 || digits.length === 10) {
-                const normal = normalizarCedula(digits);
-                if (digits.length === 9) corregidasConCero++;
-                cedulasExtraidas.push(normal);
-                break;
-              }
+            const parsed = extraerCedulaYFechaDeLinea(line);
+            if (parsed) {
+              cedulasExtraidas.push(parsed);
             }
           });
         }
@@ -1312,8 +1538,17 @@ function procesarArchivoSeleccionado(file) {
       }
 
       const totalAtenciones = cedulasExtraidas.length;
-      const unicas = [...new Set(cedulasExtraidas)];
+      const unicasMap = new Map();
+      cedulasExtraidas.forEach(it => {
+        if (!unicasMap.has(it.cedula)) unicasMap.set(it.cedula, it);
+        else if (!unicasMap.get(it.cedula).fecha && it.fecha) unicasMap.set(it.cedula, it);
+      });
+      const unicas = Array.from(unicasMap.values());
+      const duplicadosRemovidos = totalAtenciones - unicas.length;
+
       archivoCargadoDatos = {
+        totalOriginal: totalAtenciones,
+        duplicadosOriginal: duplicadosRemovidos,
         todas: cedulasExtraidas,
         unicas,
         nombre: file.name,
@@ -1324,10 +1559,10 @@ function procesarArchivoSeleccionado(file) {
 
       alert(`¡Archivo cargado con éxito!\n\n` +
             `• Archivo: ${file.name}\n` +
-            `• Total registros de atención: ${totalAtenciones.toLocaleString()} filas\n` +
-            `• Pacientes únicos: ${unicas.length.toLocaleString()}\n` +
+            `• Total filas en planilla: ${totalAtenciones.toLocaleString()}\n` +
+            `• Pacientes únicos: ${unicas.length.toLocaleString()} (Se removieron ${duplicadosRemovidos.toLocaleString()} duplicados)\n` +
             `• Cédulas restauradas con el '0' inicial: ${corregidasConCero}\n\n` +
-            `Se han cargado las ${totalAtenciones.toLocaleString()} filas completas 1 a 1.`);
+            `Se han cargado los ${unicas.length.toLocaleString()} pacientes únicos sin duplicados.`);
     };
     reader.readAsText(file, 'latin1');
   }
@@ -1341,35 +1576,37 @@ btnStartBulk.addEventListener('click', async () => {
     return;
   }
 
-  // Dividir por líneas para respetar el orden exacto 1 a 1 de la planilla
+  // Dividir por líneas para respetar el orden exacto de la planilla o texto
   const rawLines = rawText.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
-  const cedulas = [];
-  let recuperadas = 0;
+  const items = [];
 
   rawLines.forEach(line => {
-    // Si la línea contiene columnas separadas por comas o tabs, buscar la cédula
-    const parts = line.split(/[,;\t]/).map(p => p.trim());
-    let found = false;
-    for (const p of parts) {
-      const digits = p.replace(/\D/g, '');
-      if (digits.length === 9 || digits.length === 10) {
-        const norm = normalizarCedula(digits);
-        if (digits.length === 9) recuperadas++;
-        cedulas.push(norm);
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
+    const parsed = extraerCedulaYFechaDeLinea(line);
+    if (parsed) {
+      items.push(parsed);
+    } else {
       const digits = line.replace(/\D/g, '');
       if (digits.length > 0) {
-        cedulas.push(digits); // Para que se marque como inválida manteniendo el orden
+        items.push({ cedula: digits, fecha: null });
       }
     }
   });
 
   const esModoUnicas = modeUniqueOnly && modeUniqueOnly.checked;
-  const listaAProcesar = esModoUnicas ? [...new Set(cedulas)] : cedulas;
+  let listaAProcesar = [];
+  if (esModoUnicas) {
+    const unicasMap = new Map();
+    items.forEach(it => {
+      if (!unicasMap.has(it.cedula)) {
+        unicasMap.set(it.cedula, it);
+      } else if (!unicasMap.get(it.cedula).fecha && it.fecha) {
+        unicasMap.set(it.cedula, it);
+      }
+    });
+    listaAProcesar = Array.from(unicasMap.values());
+  } else {
+    listaAProcesar = items;
+  }
 
   if (listaAProcesar.length === 0) {
     alert('No se detectaron cédulas en el texto pegado.');
@@ -1392,10 +1629,13 @@ btnStartBulk.addEventListener('click', async () => {
   let invalidosCount = 0;
 
   statTotal.textContent = total.toLocaleString();
-  statAcreditados.textContent = 0;
-  statNoAcreditados.textContent = 0;
-  statInvalidos.textContent = 0;
+  statAcreditados.textContent = '0';
+  statNoAcreditados.textContent = '0';
+  statInvalidos.textContent = '0';
   actualizarBarraProgreso(0, total);
+
+  // Fecha general del lote si fue seleccionada por el usuario
+  const fechaLoteGlobal = bulkBatchDate && bulkBatchDate.value ? parsearFechaGenerica(bulkBatchDate.value) : null;
 
   // Caché en memoria para reutilizar consultas de pacientes repetidos
   const cacheIESS = new Map();
@@ -1405,7 +1645,9 @@ btnStartBulk.addEventListener('click', async () => {
   async function worker() {
     while (indiceActual < listaAProcesar.length && !bulkAborted) {
       const currentIndex = indiceActual++;
-      const ced = listaAProcesar[currentIndex];
+      const item = listaAProcesar[currentIndex];
+      const ced = item.cedula;
+      const fechaACalificar = item.fecha || fechaLoteGlobal || null;
       let rowData = null;
 
       // Validación con Módulo 10
@@ -1417,171 +1659,174 @@ btnStartBulk.addEventListener('click', async () => {
           cedula: ced,
           paciente: 'Cédula Inválida',
           estado: 'INVÁLIDA',
+          tipoSeguro: 'CÉDULA INVÁLIDA',
+          codigoSeguro: 'ERR',
+          badgeSeguroClass: 'badge-seguro invalido',
+          subsistema: 'NO ACREDITADO',
+          afiliacion: '---',
+          fechaCalificada: fechaACalificar || 'Hoy',
+          observacion: 'Dígito verificador incorrecto o provincia no válida'
+        };
+      } else {
+        try {
+          let data;
+          const cacheKey = `${ced}_${fechaACalificar || 'HOY'}`;
+          if (cacheIESS.has(cacheKey)) {
+            // Reutilización instantánea (0ms) sin sobrecargar al IESS
+            data = cacheIESS.get(cacheKey);
+          } else {
+            let url = `/api/calificar?cedula=${ced}`;
+            if (fechaACalificar) {
+              url += `&fecha=${encodeURIComponent(fechaACalificar)}`;
+            }
+            const res = await fetch(url);
+            data = await res.json();
+            cacheIESS.set(cacheKey, data);
+          }
+
+          const isAcred = data.estadoFinal === 'ACREDITADO';
+          if (isAcred) {
+            acreditadosCount++;
+            statAcreditados.textContent = acreditadosCount;
+          } else {
+            noAcreditadosCount++;
+            statNoAcreditados.textContent = noAcreditadosCount;
+          }
+
+          const segInfo = (data.iess && data.iess.tipoSeguro && data.iess.codigoSeguro)
+            ? {
+                codigo: data.iess.codigoSeguro,
+                nombre: data.iess.tipoSeguro,
+                subsistema: data.iess.subSistema || data.iess.entidad,
+                badgeClass: `badge-seguro ${data.iess.codigoSeguro.toLowerCase().replace(/[^a-z]/g, '')}`
+              }
+            : clasificarTipoSeguroCliente(data.iess?.tipoAfiliacion, data.iess?.observacion, isAcred);
+
           rowData = {
             indice: currentIndex + 1,
             cedula: ced,
-            paciente: 'Cédula Inválida',
-            estado: 'INVÁLIDA',
-            tipoSeguro: 'CÉDULA INVÁLIDA',
+            paciente: (data.iess && data.iess.nombres) || 'No especificado',
+            estado: isAcred ? 'ACREDITADO' : 'NO ACREDITADO',
+            tipoSeguro: segInfo.nombre,
+            codigoSeguro: segInfo.codigo,
+            badgeSeguroClass: segInfo.badgeClass,
+            subsistema: segInfo.subsistema,
+            afiliacion: (data.iess && data.iess.tipoAfiliacion) || 'Seguro General',
+            fechaCalificada: data.fechaCalificada || fechaACalificar || 'Hoy',
+            observacion: (data.iess && data.iess.observacion) || 'Sin observación'
+          };
+        } catch (err) {
+          noAcreditadosCount++;
+          statNoAcreditados.textContent = noAcreditadosCount;
+          rowData = {
+            indice: currentIndex + 1,
+            cedula: ced,
+            paciente: 'Error de Red',
+            estado: 'ERROR',
+            tipoSeguro: 'ERROR DE CONEXIÓN',
             codigoSeguro: 'ERR',
             badgeSeguroClass: 'badge-seguro invalido',
-            subsistema: 'NO ACREDITADO',
+            subsistema: 'ERROR',
             afiliacion: '---',
-            observacion: 'Dígito verificador incorrecto o provincia no válida'
+            fechaCalificada: fechaACalificar || 'Hoy',
+            observacion: err.message
           };
-        } else {
-          try {
-            let data;
-            if (cacheIESS.has(ced)) {
-              // Reutilización instantánea (0ms) sin sobrecargar al IESS
-              data = cacheIESS.get(ced);
-            } else {
-              const res = await fetch(`/api/calificar?cedula=${ced}`);
-              data = await res.json();
-              cacheIESS.set(ced, data);
-            }
-
-            const isAcred = data.estadoFinal === 'ACREDITADO';
-            if (isAcred) {
-              acreditadosCount++;
-              statAcreditados.textContent = acreditadosCount;
-            } else {
-              noAcreditadosCount++;
-              statNoAcreditados.textContent = noAcreditadosCount;
-            }
-
-            const segInfo = (data.iess && data.iess.tipoSeguro && data.iess.codigoSeguro)
-              ? {
-                  codigo: data.iess.codigoSeguro,
-                  nombre: data.iess.tipoSeguro,
-                  subsistema: data.iess.subSistema || data.iess.entidad,
-                  badgeClass: `badge-seguro ${data.iess.codigoSeguro.toLowerCase().replace(/[^a-z]/g, '')}`
-                }
-              : clasificarTipoSeguroCliente(data.iess?.tipoAfiliacion, data.iess?.observacion, isAcred);
-
-            rowData = {
-              indice: currentIndex + 1,
-              cedula: ced,
-              paciente: (data.iess && data.iess.nombres) || 'No especificado',
-              estado: isAcred ? 'ACREDITADO' : 'NO ACREDITADO',
-              tipoSeguro: segInfo.nombre,
-              codigoSeguro: segInfo.codigo,
-              badgeSeguroClass: segInfo.badgeClass,
-              subsistema: segInfo.subsistema,
-              afiliacion: (data.iess && data.iess.tipoAfiliacion) || 'Seguro General',
-              observacion: (data.iess && data.iess.observacion) || 'Sin observación'
-            };
-          } catch (err) {
-            noAcreditadosCount++;
-            statNoAcreditados.textContent = noAcreditadosCount;
-            rowData = {
-              indice: currentIndex + 1,
-              cedula: ced,
-              paciente: 'Error de Red',
-              estado: 'ERROR',
-              tipoSeguro: 'ERROR DE CONEXIÓN',
-              codigoSeguro: 'ERR',
-              badgeSeguroClass: 'badge-seguro invalido',
-              subsistema: 'ERROR',
-              afiliacion: '---',
-              observacion: err.message
-            };
-          }
         }
-
-        bulkResults.push(rowData);
-        agregarFilaTabla(rowData);
-
-        completados++;
-        actualizarBarraProgreso(completados, total);
       }
+
+      bulkResults.push(rowData);
+      agregarFilaTabla(rowData);
+
+      completados++;
+      actualizarBarraProgreso(completados, total);
     }
-
-    // Lanzar workers simultáneos
-    const workers = [];
-    const activeWorkers = Math.min(CONCURRENCIA, total);
-    for (let w = 0; w < activeWorkers; w++) {
-      workers.push(worker());
-    }
-
-    await Promise.all(workers);
-
-    // Ordenar resultados por índice original para garantizar correspondencia 1 a 1 exacta
-    bulkResults.sort((a, b) => a.indice - b.indice);
-
-    btnStartBulk.style.display = 'inline-block';
-    btnStopBulk.style.display = 'none';
-    if (bulkResults.length > 0) {
-      btnExportExcel.style.display = 'block';
-    }
-  });
-
-  btnStopBulk.addEventListener('click', () => {
-    bulkAborted = true;
-    btnStopBulk.textContent = 'Deteniendo...';
-  });
-
-  function actualizarBarraProgreso(actual, total) {
-    bulkProgressText.textContent = `${actual} / ${total}`;
-    const pct = total > 0 ? Math.round((actual / total) * 100) : 0;
-    bulkProgressFill.style.width = `${pct}%`;
   }
 
-  function agregarFilaTabla(row) {
-    // Para no sobrecargar la memoria con miles de filas en pantalla,
-    // mantenemos visibles las últimas 100 filas mientras todas se guardan para el Excel
-    if (bulkTableBody.children.length > 100) {
-      bulkTableBody.removeChild(bulkTableBody.firstElementChild);
-    }
-
-    const tr = document.createElement('tr');
-
-    let badgeClass = 'badge-status';
-    if (row.estado === 'ACREDITADO') badgeClass += ' acreditado';
-    else if (row.estado === 'NO ACREDITADO') badgeClass += ' no-acreditado';
-    else badgeClass += ' invalido';
-
-    const esCampesino = row.codigoSeguro === 'CA' || row.codigoSeguro === 'CB' || (row.codigoSeguro && row.codigoSeguro.includes('SSC'));
-    const colorTextoSeguro = esCampesino ? '#15803d' : '#1e40af';
-
-    tr.innerHTML = `
-      <td>${row.indice}</td>
-      <td><strong>${row.cedula}</strong></td>
-      <td>${row.paciente}</td>
-      <td><span class="${badgeClass}">${row.estado}</span></td>
-      <td><strong style="color: ${colorTextoSeguro}; font-size: 0.82rem;">${row.tipoSeguro || row.afiliacion}</strong></td>
-      <td><span class="${row.badgeSeguroClass || 'badge-seguro sg'}">${row.codigoSeguro || '---'}</span></td>
-      <td><small>${row.observacion}</small></td>
-    `;
-
-    bulkTableBody.appendChild(tr);
-    tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // Lanzar workers simultáneos
+  const workers = [];
+  const activeWorkers = Math.min(CONCURRENCIA, total);
+  for (let w = 0; w < activeWorkers; w++) {
+    workers.push(worker());
   }
 
-  // ==========================================
-  // 6. EXPORTAR A EXCEL (.XLSX)
-  // ==========================================
-  btnExportExcel.addEventListener('click', () => {
-    if (bulkResults.length === 0) return;
+  await Promise.all(workers);
 
-    const dataExport = bulkResults.map(r => ({
-      'N°': r.indice,
-      'Cédula': r.cedula,
-      'Apellidos y Nombres': r.paciente,
-      'Estado Calificación': r.estado,
-      'Tipo de Seguro': r.tipoSeguro || r.afiliacion,
-      'Código Seguro': r.codigoSeguro || '---',
-      'Subsistema': r.subsistema || 'IESS',
-      'Detalle Afiliación IESS': r.afiliacion,
-      'Observación IESS': r.observacion,
-      'Contingencia': 'Enfermedad (14)',
-      'Fecha de Consulta': new Date().toLocaleDateString('es-EC')
-    }));
+  // Ordenar resultados por índice original
+  bulkResults.sort((a, b) => a.indice - b.indice);
 
-    const ws = XLSX.utils.json_to_sheet(dataExport);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Calificación IESS');
+  btnStartBulk.style.display = 'inline-block';
+  btnStopBulk.style.display = 'none';
+  if (bulkResults.length > 0) {
+    btnExportExcel.style.display = 'block';
+  }
+});
 
-    const fechaArchivo = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `Calificacion_IESS_Lote_${fechaArchivo}.xlsx`);
-  });
+btnStopBulk.addEventListener('click', () => {
+  bulkAborted = true;
+  btnStopBulk.textContent = 'Deteniendo...';
+});
+
+function actualizarBarraProgreso(actual, total) {
+  bulkProgressText.textContent = `${actual} / ${total}`;
+  const pct = total > 0 ? Math.round((actual / total) * 100) : 0;
+  bulkProgressFill.style.width = `${pct}%`;
+}
+
+function agregarFilaTabla(row) {
+  if (bulkTableBody.children.length > 100) {
+    bulkTableBody.removeChild(bulkTableBody.firstElementChild);
+  }
+
+  const tr = document.createElement('tr');
+
+  let badgeClass = 'badge-status';
+  if (row.estado === 'ACREDITADO') badgeClass += ' acreditado';
+  else if (row.estado === 'NO ACREDITADO') badgeClass += ' no-acreditado';
+  else badgeClass += ' invalido';
+
+  const esCampesino = row.codigoSeguro === 'CA' || row.codigoSeguro === 'CB' || (row.codigoSeguro && row.codigoSeguro.includes('SSC'));
+  const colorTextoSeguro = esCampesino ? '#15803d' : '#1e40af';
+
+  tr.innerHTML = `
+    <td>${row.indice}</td>
+    <td><strong>${row.cedula}</strong></td>
+    <td>${row.paciente}</td>
+    <td><span class="${badgeClass}">${row.estado}</span></td>
+    <td><strong style="color: ${colorTextoSeguro}; font-size: 0.82rem;">${row.tipoSeguro || row.afiliacion}</strong></td>
+    <td><span class="${row.badgeSeguroClass || 'badge-seguro sg'}">${row.codigoSeguro || '---'}</span></td>
+    <td><small style="font-weight: 600; color: var(--slate-700);">${row.fechaCalificada || 'Hoy'}</small></td>
+    <td><small>${row.observacion}</small></td>
+  `;
+
+  bulkTableBody.appendChild(tr);
+  tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ==========================================
+// 6. EXPORTAR A EXCEL (.XLSX)
+// ==========================================
+btnExportExcel.addEventListener('click', () => {
+  if (bulkResults.length === 0) return;
+
+  const dataExport = bulkResults.map(r => ({
+    'N°': r.indice,
+    'Cédula': r.cedula,
+    'Apellidos y Nombres': r.paciente,
+    'Estado Calificación': r.estado,
+    'Tipo de Seguro': r.tipoSeguro || r.afiliacion,
+    'Código Seguro': r.codigoSeguro || '---',
+    'Subsistema': r.subsistema || 'IESS',
+    'Detalle Afiliación IESS': r.afiliacion,
+    'Fecha Calificada': r.fechaCalificada || 'Hoy',
+    'Observación IESS': r.observacion,
+    'Contingencia': 'Enfermedad (14)',
+    'Fecha de Reporte': new Date().toLocaleDateString('es-EC')
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(dataExport);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Calificación IESS');
+
+  const fechaArchivo = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `Calificacion_IESS_Lote_${fechaArchivo}.xlsx`);
+});

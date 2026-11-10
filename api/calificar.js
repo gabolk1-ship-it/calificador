@@ -1,4 +1,4 @@
-﻿import { validarCedulaEcuador } from '../lib/cedulaValidator.js';
+import { validarCedulaEcuador } from '../lib/cedulaValidator.js';
 import { consultarIESS } from '../lib/iessScraper.js';
 import { consultarMSP } from '../lib/mspScraper.js';
 
@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     return res.status(204).end();
   }
 
-  const { cedula } = req.query;
+  const { cedula, fecha } = req.query;
 
   if (!cedula) {
     return res.status(400).json({ exito: false, mensaje: 'El parámetro "cedula" es requerido' });
@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   const inicio = Date.now();
 
   const [resIESS, resMSP] = await Promise.all([
-    consultarIESS(validacion.cedula),
+    consultarIESS(validacion.cedula, fecha),
     consultarMSP(validacion.cedula)
   ]);
 
@@ -50,6 +50,7 @@ export default async function handler(req, res) {
     exito: true,
     cedula: validacion.cedula,
     contingencia: 'Enfermedad',
+    fechaCalificada: resIESS.fechaCalificada || fecha || null,
     estadoFinal,
     duracionMs,
     timestamp: new Date().toISOString(),

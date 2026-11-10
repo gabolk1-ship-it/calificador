@@ -116,6 +116,7 @@ const server = http.createServer(async (req, res) => {
   // Endpoint 3: Calificar en IESS + MSP (Contingencia Enfermedad = 14)
   if (pathname === '/api/calificar') {
     const cedula = reqUrl.searchParams.get('cedula');
+    const fecha = reqUrl.searchParams.get('fecha');
 
     if (!cedula) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -138,7 +139,7 @@ const server = http.createServer(async (req, res) => {
     const inicio = Date.now();
 
     const [resIESS, resMSP] = await Promise.all([
-      consultarIESS(validacion.cedula),
+      consultarIESS(validacion.cedula, fecha),
       consultarMSP(validacion.cedula)
     ]);
 
@@ -158,6 +159,7 @@ const server = http.createServer(async (req, res) => {
       exito: true,
       cedula: validacion.cedula,
       contingencia: 'Enfermedad',
+      fechaCalificada: resIESS.fechaCalificada || fecha || null,
       estadoFinal,
       duracionMs,
       timestamp: new Date().toISOString(),
