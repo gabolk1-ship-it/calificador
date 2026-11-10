@@ -33,6 +33,8 @@ const statusTitle = document.getElementById('status-title');
 const statusDesc = document.getElementById('status-desc');
 const resCedula = document.getElementById('res-cedula');
 const resNombres = document.getElementById('res-nombres');
+const resTipoSeguro = document.getElementById('res-tipo-seguro');
+const resCodigoSeguro = document.getElementById('res-codigo-seguro');
 const resAfiliacion = document.getElementById('res-afiliacion');
 const resTiempo = document.getElementById('res-tiempo');
 const mspDesc = document.getElementById('msp-desc');
@@ -835,6 +837,124 @@ async function ejecutarConsultaIndividual(cedula) {
   }
 }
 
+/**
+ * Clasifica de forma precisa el Tipo de Seguro médico según la normativa IESS:
+ * - CA: Campesino Afiliado (Jefe de familia / Titular del Seguro Social Campesino)
+ * - CB: Campesino Beneficiario (Dependiente / Familiar del Seguro Social Campesino)
+ * - JUB-SSC: Jubilado del Seguro Social Campesino
+ * - SG: Seguro General (Tiempo Completo / Tiempo Parcial)
+ * - JUB-SG: Jubilado Seguro General
+ * - MONTEPIO: Pensionista / Montepío
+ * - VOL: Afiliado Voluntario
+ * - DEP-SG: Dependiente por extensión de cobertura (Cónyuge / Hijos menores)
+ */
+function clasificarTipoSeguroCliente(tipoAfiliacion = '', observacion = '', acreditado = true) {
+  const afil = String(tipoAfiliacion || '').trim();
+  const obs = String(observacion || '').trim();
+  const combo = `${afil} ${obs}`.toUpperCase();
+
+  if (!acreditado) {
+    return {
+      codigo: 'SIN_COBERTURA',
+      nombre: 'SIN COBERTURA ACTIVA',
+      subsistema: 'NO ACREDITADO',
+      badgeClass: 'badge-seguro invalido'
+    };
+  }
+
+  // 1. SEGURO SOCIAL CAMPESINO (SSC)
+  const esCampesino = /CAMPESINO|SSC/i.test(combo);
+  if (esCampesino) {
+    if (/JEFE DE FAMILIA/i.test(combo)) {
+      return {
+        codigo: 'CA',
+        nombre: 'SEGURO SOCIAL CAMPESINO - CA (JEFE DE FAMILIA / TITULAR)',
+        subsistema: 'SEGURO SOCIAL CAMPESINO (SSC)',
+        badgeClass: 'badge-seguro ca'
+      };
+    }
+    if (/JUBILAD/i.test(combo)) {
+      return {
+        codigo: 'JUB-SSC',
+        nombre: 'JUBILADO SEGURO SOCIAL CAMPESINO (SSC)',
+        subsistema: 'SEGURO SOCIAL CAMPESINO (SSC)',
+        badgeClass: 'badge-seguro jub'
+      };
+    }
+    return {
+      codigo: 'CB',
+      nombre: 'SEGURO SOCIAL CAMPESINO - CB (BENEFICIARIO / DEPENDIENTE)',
+      subsistema: 'SEGURO SOCIAL CAMPESINO (SSC)',
+      badgeClass: 'badge-seguro cb'
+    };
+  }
+
+  // 2. JUBILADOS SEGURO GENERAL
+  if (/JUBILAD/i.test(combo)) {
+    return {
+      codigo: 'JUB-SG',
+      nombre: 'JUBILADO SEGURO GENERAL',
+      subsistema: 'SEGURO GENERAL (IESS)',
+      badgeClass: 'badge-seguro jub'
+    };
+  }
+
+  // 3. MONTEPÍO / PENSIONISTA
+  if (/MONTEP[IÍ]O|PENSIONISTA/i.test(combo)) {
+    return {
+      codigo: 'MONTEPIO',
+      nombre: 'PENSIONISTA / MONTEPÍO (IESS)',
+      subsistema: 'SEGURO GENERAL (IESS)',
+      badgeClass: 'badge-seguro sg'
+    };
+  }
+
+  // 4. AFILIADO VOLUNTARIO
+  if (/VOLUNTARI/i.test(combo)) {
+    return {
+      codigo: 'VOL',
+      nombre: 'AFILIADO VOLUNTARIO (IESS)',
+      subsistema: 'SEGURO GENERAL (IESS)',
+      badgeClass: 'badge-seguro sg'
+    };
+  }
+
+  // 5. DEPENDIENTES (CÓNYUGE / HIJOS MENORES - EXTENSIÓN DE COBERTURA)
+  if (/C[OÓ]NYUGE|HIJO|DEPENDIENTE|EXTENSI[OÓ]N/i.test(combo)) {
+    return {
+      codigo: 'DEP-SG',
+      nombre: 'DEPENDIENTE POR EXTENSIÓN DE COBERTURA (IESS)',
+      subsistema: 'SEGURO GENERAL (IESS)',
+      badgeClass: 'badge-seguro sg'
+    };
+  }
+
+  // 6. SEGURO GENERAL TIEMPO COMPLETO / PARCIAL
+  if (/TIEMPO COMPLETO/i.test(combo)) {
+    return {
+      codigo: 'SG',
+      nombre: 'AFILIADO SEGURO GENERAL TIEMPO COMPLETO',
+      subsistema: 'SEGURO GENERAL (IESS)',
+      badgeClass: 'badge-seguro sg'
+    };
+  }
+  if (/TIEMPO PARCIAL|MEDIO TIEMPO/i.test(combo)) {
+    return {
+      codigo: 'SG-TP',
+      nombre: 'AFILIADO SEGURO GENERAL TIEMPO PARCIAL',
+      subsistema: 'SEGURO GENERAL (IESS)',
+      badgeClass: 'badge-seguro sg'
+    };
+  }
+
+  return {
+    codigo: 'SG',
+    nombre: afil || 'SEGURO GENERAL',
+    subsistema: 'SEGURO GENERAL (IESS)',
+    badgeClass: 'badge-seguro sg'
+  };
+}
+
 function mostrarResultadoIndividual(data) {
   resultContainer.style.display = 'block';
 
@@ -843,10 +963,25 @@ function mostrarResultadoIndividual(data) {
   resAfiliacion.textContent = (data.iess && data.iess.tipoAfiliacion) || 'Seguro General';
   resTiempo.textContent = `${data.duracionMs || 0} ms`;
 
-  if (data.estadoFinal === 'ACREDITADO') {
+  const isAcred = data.estadoFinal === 'ACREDITADO';
+  const segInfo = (data.iess && data.iess.tipoSeguro && data.iess.codigoSeguro)
+    ? {
+        codigo: data.iess.codigoSeguro,
+        nombre: data.iess.tipoSeguro,
+        subsistema: data.iess.subSistema || data.iess.entidad,
+        badgeClass: `badge-seguro ${data.iess.codigoSeguro.toLowerCase().replace(/[^a-z]/g, '')}`
+      }
+    : clasificarTipoSeguroCliente(data.iess?.tipoAfiliacion, data.iess?.observacion, isAcred);
+
+  if (resTipoSeguro) resTipoSeguro.textContent = segInfo.nombre;
+  if (resCodigoSeguro) {
+    resCodigoSeguro.innerHTML = `<span class="${segInfo.badgeClass}">${segInfo.codigo}</span> <strong style="color: var(--slate-700); margin-left: 6px;">${segInfo.subsistema}</strong>`;
+  }
+
+  if (isAcred) {
     statusBanner.className = 'status-banner acreditado';
-    statusTitle.innerHTML = '🟢 ACREDITADO';
-    statusDesc.textContent = (data.iess && data.iess.observacion) || 'Asegurado con cobertura médica vigente para Enfermedad.';
+    statusTitle.innerHTML = `🟢 ACREDITADO • ${segInfo.codigo}`;
+    statusDesc.textContent = `${segInfo.nombre} — ${(data.iess && data.iess.observacion) || 'Cobertura médica vigente para Enfermedad.'}`;
   } else if (data.estadoFinal === 'NO_ACREDITADO') {
     statusBanner.className = 'status-banner no-acreditado';
     statusTitle.innerHTML = '🔴 NO ACREDITADO';
@@ -1282,138 +1417,171 @@ btnStartBulk.addEventListener('click', async () => {
           cedula: ced,
           paciente: 'Cédula Inválida',
           estado: 'INVÁLIDA',
-          afiliacion: '---',
-          observacion: 'Dígito verificador incorrecto o provincia no válida'
-        };
-      } else {
-        try {
-          let data;
-          if (cacheIESS.has(ced)) {
-            // Reutilización instantánea (0ms) sin sobrecargar al IESS
-            data = cacheIESS.get(ced);
-          } else {
-            const res = await fetch(`/api/calificar?cedula=${ced}`);
-            data = await res.json();
-            cacheIESS.set(ced, data);
-          }
+          rowData = {
+            indice: currentIndex + 1,
+            cedula: ced,
+            paciente: 'Cédula Inválida',
+            estado: 'INVÁLIDA',
+            tipoSeguro: 'CÉDULA INVÁLIDA',
+            codigoSeguro: 'ERR',
+            badgeSeguroClass: 'badge-seguro invalido',
+            subsistema: 'NO ACREDITADO',
+            afiliacion: '---',
+            observacion: 'Dígito verificador incorrecto o provincia no válida'
+          };
+        } else {
+          try {
+            let data;
+            if (cacheIESS.has(ced)) {
+              // Reutilización instantánea (0ms) sin sobrecargar al IESS
+              data = cacheIESS.get(ced);
+            } else {
+              const res = await fetch(`/api/calificar?cedula=${ced}`);
+              data = await res.json();
+              cacheIESS.set(ced, data);
+            }
 
-          const isAcred = data.estadoFinal === 'ACREDITADO';
-          if (isAcred) {
-            acreditadosCount++;
-            statAcreditados.textContent = acreditadosCount;
-          } else {
+            const isAcred = data.estadoFinal === 'ACREDITADO';
+            if (isAcred) {
+              acreditadosCount++;
+              statAcreditados.textContent = acreditadosCount;
+            } else {
+              noAcreditadosCount++;
+              statNoAcreditados.textContent = noAcreditadosCount;
+            }
+
+            const segInfo = (data.iess && data.iess.tipoSeguro && data.iess.codigoSeguro)
+              ? {
+                  codigo: data.iess.codigoSeguro,
+                  nombre: data.iess.tipoSeguro,
+                  subsistema: data.iess.subSistema || data.iess.entidad,
+                  badgeClass: `badge-seguro ${data.iess.codigoSeguro.toLowerCase().replace(/[^a-z]/g, '')}`
+                }
+              : clasificarTipoSeguroCliente(data.iess?.tipoAfiliacion, data.iess?.observacion, isAcred);
+
+            rowData = {
+              indice: currentIndex + 1,
+              cedula: ced,
+              paciente: (data.iess && data.iess.nombres) || 'No especificado',
+              estado: isAcred ? 'ACREDITADO' : 'NO ACREDITADO',
+              tipoSeguro: segInfo.nombre,
+              codigoSeguro: segInfo.codigo,
+              badgeSeguroClass: segInfo.badgeClass,
+              subsistema: segInfo.subsistema,
+              afiliacion: (data.iess && data.iess.tipoAfiliacion) || 'Seguro General',
+              observacion: (data.iess && data.iess.observacion) || 'Sin observación'
+            };
+          } catch (err) {
             noAcreditadosCount++;
             statNoAcreditados.textContent = noAcreditadosCount;
+            rowData = {
+              indice: currentIndex + 1,
+              cedula: ced,
+              paciente: 'Error de Red',
+              estado: 'ERROR',
+              tipoSeguro: 'ERROR DE CONEXIÓN',
+              codigoSeguro: 'ERR',
+              badgeSeguroClass: 'badge-seguro invalido',
+              subsistema: 'ERROR',
+              afiliacion: '---',
+              observacion: err.message
+            };
           }
-
-          rowData = {
-            indice: currentIndex + 1,
-            cedula: ced,
-            paciente: (data.iess && data.iess.nombres) || 'No especificado',
-            estado: isAcred ? 'ACREDITADO' : 'NO ACREDITADO',
-            afiliacion: (data.iess && data.iess.tipoAfiliacion) || 'Seguro General',
-            observacion: (data.iess && data.iess.observacion) || 'Sin observación'
-          };
-        } catch (err) {
-          noAcreditadosCount++;
-          statNoAcreditados.textContent = noAcreditadosCount;
-          rowData = {
-            indice: currentIndex + 1,
-            cedula: ced,
-            paciente: 'Error de Red',
-            estado: 'ERROR',
-            afiliacion: '---',
-            observacion: err.message
-          };
         }
+
+        bulkResults.push(rowData);
+        agregarFilaTabla(rowData);
+
+        completados++;
+        actualizarBarraProgreso(completados, total);
       }
-
-      bulkResults.push(rowData);
-      agregarFilaTabla(rowData);
-
-      completados++;
-      actualizarBarraProgreso(completados, total);
     }
+
+    // Lanzar workers simultáneos
+    const workers = [];
+    const activeWorkers = Math.min(CONCURRENCIA, total);
+    for (let w = 0; w < activeWorkers; w++) {
+      workers.push(worker());
+    }
+
+    await Promise.all(workers);
+
+    // Ordenar resultados por índice original para garantizar correspondencia 1 a 1 exacta
+    bulkResults.sort((a, b) => a.indice - b.indice);
+
+    btnStartBulk.style.display = 'inline-block';
+    btnStopBulk.style.display = 'none';
+    if (bulkResults.length > 0) {
+      btnExportExcel.style.display = 'block';
+    }
+  });
+
+  btnStopBulk.addEventListener('click', () => {
+    bulkAborted = true;
+    btnStopBulk.textContent = 'Deteniendo...';
+  });
+
+  function actualizarBarraProgreso(actual, total) {
+    bulkProgressText.textContent = `${actual} / ${total}`;
+    const pct = total > 0 ? Math.round((actual / total) * 100) : 0;
+    bulkProgressFill.style.width = `${pct}%`;
   }
 
-  // Lanzar workers simultáneos
-  const workers = [];
-  const activeWorkers = Math.min(CONCURRENCIA, total);
-  for (let w = 0; w < activeWorkers; w++) {
-    workers.push(worker());
+  function agregarFilaTabla(row) {
+    // Para no sobrecargar la memoria con miles de filas en pantalla,
+    // mantenemos visibles las últimas 100 filas mientras todas se guardan para el Excel
+    if (bulkTableBody.children.length > 100) {
+      bulkTableBody.removeChild(bulkTableBody.firstElementChild);
+    }
+
+    const tr = document.createElement('tr');
+
+    let badgeClass = 'badge-status';
+    if (row.estado === 'ACREDITADO') badgeClass += ' acreditado';
+    else if (row.estado === 'NO ACREDITADO') badgeClass += ' no-acreditado';
+    else badgeClass += ' invalido';
+
+    const esCampesino = row.codigoSeguro === 'CA' || row.codigoSeguro === 'CB' || (row.codigoSeguro && row.codigoSeguro.includes('SSC'));
+    const colorTextoSeguro = esCampesino ? '#15803d' : '#1e40af';
+
+    tr.innerHTML = `
+      <td>${row.indice}</td>
+      <td><strong>${row.cedula}</strong></td>
+      <td>${row.paciente}</td>
+      <td><span class="${badgeClass}">${row.estado}</span></td>
+      <td><strong style="color: ${colorTextoSeguro}; font-size: 0.82rem;">${row.tipoSeguro || row.afiliacion}</strong></td>
+      <td><span class="${row.badgeSeguroClass || 'badge-seguro sg'}">${row.codigoSeguro || '---'}</span></td>
+      <td><small>${row.observacion}</small></td>
+    `;
+
+    bulkTableBody.appendChild(tr);
+    tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
-  await Promise.all(workers);
+  // ==========================================
+  // 6. EXPORTAR A EXCEL (.XLSX)
+  // ==========================================
+  btnExportExcel.addEventListener('click', () => {
+    if (bulkResults.length === 0) return;
 
-  // Ordenar resultados por índice original para garantizar correspondencia 1 a 1 exacta
-  bulkResults.sort((a, b) => a.indice - b.indice);
+    const dataExport = bulkResults.map(r => ({
+      'N°': r.indice,
+      'Cédula': r.cedula,
+      'Apellidos y Nombres': r.paciente,
+      'Estado Calificación': r.estado,
+      'Tipo de Seguro': r.tipoSeguro || r.afiliacion,
+      'Código Seguro': r.codigoSeguro || '---',
+      'Subsistema': r.subsistema || 'IESS',
+      'Detalle Afiliación IESS': r.afiliacion,
+      'Observación IESS': r.observacion,
+      'Contingencia': 'Enfermedad (14)',
+      'Fecha de Consulta': new Date().toLocaleDateString('es-EC')
+    }));
 
-  btnStartBulk.style.display = 'inline-block';
-  btnStopBulk.style.display = 'none';
-  if (bulkResults.length > 0) {
-    btnExportExcel.style.display = 'block';
-  }
-});
+    const ws = XLSX.utils.json_to_sheet(dataExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Calificación IESS');
 
-btnStopBulk.addEventListener('click', () => {
-  bulkAborted = true;
-  btnStopBulk.textContent = 'Deteniendo...';
-});
-
-function actualizarBarraProgreso(actual, total) {
-  bulkProgressText.textContent = `${actual} / ${total}`;
-  const pct = total > 0 ? Math.round((actual / total) * 100) : 0;
-  bulkProgressFill.style.width = `${pct}%`;
-}
-
-function agregarFilaTabla(row) {
-  // Para no sobrecargar la memoria con 4000 filas en pantalla,
-  // mantenemos visibles las últimas 100 filas mientras todas se guardan para el Excel
-  if (bulkTableBody.children.length > 100) {
-    bulkTableBody.removeChild(bulkTableBody.firstElementChild);
-  }
-
-  const tr = document.createElement('tr');
-
-  let badgeClass = 'badge-status';
-  if (row.estado === 'ACREDITADO') badgeClass += ' acreditado';
-  else if (row.estado === 'NO ACREDITADO') badgeClass += ' no-acreditado';
-  else badgeClass += ' invalido';
-
-  tr.innerHTML = `
-    <td>${row.indice}</td>
-    <td><strong>${row.cedula}</strong></td>
-    <td>${row.paciente}</td>
-    <td><span class="${badgeClass}">${row.estado}</span></td>
-    <td>${row.afiliacion}</td>
-    <td><small>${row.observacion}</small></td>
-  `;
-
-  bulkTableBody.appendChild(tr);
-  tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-// ==========================================
-// 6. EXPORTAR A EXCEL (.XLSX)
-// ==========================================
-btnExportExcel.addEventListener('click', () => {
-  if (bulkResults.length === 0) return;
-
-  const dataExport = bulkResults.map(r => ({
-    'N°': r.indice,
-    'Cédula': r.cedula,
-    'Apellidos y Nombres': r.paciente,
-    'Estado Calificación': r.estado,
-    'Tipo de Afiliación': r.afiliacion,
-    'Observación IESS': r.observacion,
-    'Contingencia': 'Enfermedad (14)',
-    'Fecha de Consulta': new Date().toLocaleDateString('es-EC')
-  }));
-
-  const ws = XLSX.utils.json_to_sheet(dataExport);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Calificación IESS');
-
-  const fechaArchivo = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `Calificacion_IESS_Lote_${fechaArchivo}.xlsx`);
-});
+    const fechaArchivo = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Calificacion_IESS_Lote_${fechaArchivo}.xlsx`);
+  });
