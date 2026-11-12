@@ -47,19 +47,22 @@ test('Solucionador Altcha: resuelve reto SHA-256 en menos de 200ms', () => {
 test('Clasificador de Seguro: clasifica CA, CB y SG correctamente', async () => {
   const { clasificarTipoSeguro, determinarGrupoEtario } = await import('../lib/iessScraper.js');
 
-  // Jefe de familia SSC
-  const cCA = clasificarTipoSeguro('Afiliado Seguro Campesino', 'Jefe de Familia del SSC', true);
-  assert.strictEqual(cCA.codigo, 'CA');
-  assert.strictEqual(cCA.subsistema, 'SEGURO SOCIAL CAMPESINO (SSC)');
-
-  // Beneficiario dependiente SSC
-  const cCB = clasificarTipoSeguro('Afiliado Seguro Campesino', 'Cédula Registrada con Derecho', true);
+  // Jefe de familia SSC (CB según catálogo oficial REPRE08)
+  const cCB = clasificarTipoSeguro('Afiliado Seguro Campesino', 'Jefe de Familia del SSC', true);
   assert.strictEqual(cCB.codigo, 'CB');
+  assert.strictEqual(cCB.nombre, 'JEFE FAMILIA SEG.SOC.CAMPESINO');
   assert.strictEqual(cCB.subsistema, 'SEGURO SOCIAL CAMPESINO (SSC)');
+
+  // Beneficiario dependiente SSC (CA según catálogo oficial REPRE08)
+  const cCA = clasificarTipoSeguro('Afiliado Seguro Campesino', 'Cédula Registrada con Derecho', true);
+  assert.strictEqual(cCA.codigo, 'CA');
+  assert.strictEqual(cCA.nombre, 'FAMILIAR SEG.SOCIAL CAMPESINO');
+  assert.strictEqual(cCA.subsistema, 'SEGURO SOCIAL CAMPESINO (SSC)');
 
   // Seguro General
   const cSG = clasificarTipoSeguro('Seguro General', 'Cédula Registrada con Derecho', true);
   assert.strictEqual(cSG.codigo, 'SG');
+  assert.strictEqual(cSG.nombre, 'AFILIADO DEL SEGURO GENERAL');
   assert.strictEqual(cSG.subsistema, 'SEGURO GENERAL OBLIGATORIO (SGO)');
 
   // No asumir Seguro General cuando la descripción es de otra entidad o régimen
@@ -71,27 +74,29 @@ test('Clasificador de Seguro: clasifica CA, CB y SG correctamente', async () => 
   // Hijos menores de 18 años (extensión de cobertura)
   const cAG = clasificarTipoSeguro('Dependiente hijo menor de 18 años de afiliado/pensionista', 'Con Cobertura', true);
   assert.strictEqual(cAG.codigo, 'AG');
+  assert.strictEqual(cAG.nombre, 'HIJOS DE AFILIADO <18 AÑOS');
   assert.strictEqual(cAG.subsistema, 'EXTENSIÓN DE COBERTURA (IESS)');
 
   // Afiliado Voluntario
   const cCV = clasificarTipoSeguro('Afiliado Voluntario', 'Con Cobertura', true);
   assert.strictEqual(cCV.codigo, 'CV');
+  assert.strictEqual(cCV.nombre, 'AFILIADO VOLUNTARIO');
   assert.strictEqual(cCV.subsistema, 'SEGURO DE AFILIACIÓN VOLUNTARIA');
 
   // Detección de menores (niños)
-  // Caso 1: Cédula de niño en SSC con serie 176...
-  const gMenorSSC = determinarGrupoEtario('1761031838', 'CB', 'Cédula Registrada con Derecho', 'Afiliado Seguro Campesino');
+  // Caso 1: Cédula de niño en SSC familiar con serie 176...
+  const gMenorSSC = determinarGrupoEtario('1761031838', 'CA', 'Cédula Registrada con Derecho', 'Afiliado Seguro Campesino');
   assert.strictEqual(gMenorSSC.esMenor, true);
   assert.strictEqual(gMenorSSC.grupoEtario, 'Menor de edad (Niño)');
   assert.strictEqual(gMenorSSC.esMenorTexto, 'SÍ');
 
-  // Caso 2: Cédula tradicional adulto jefe de familia
-  const gAdultoCA = determinarGrupoEtario('1708683873', 'CA', 'Jefe de Familia del SSC', 'Afiliado Seguro Campesino');
-  assert.strictEqual(gAdultoCA.esMenor, false);
-  assert.strictEqual(gAdultoCA.grupoEtario, 'Adulto');
-  assert.strictEqual(gAdultoCA.esMenorTexto, 'NO');
+  // Caso 2: Cédula tradicional adulto jefe de familia (CB)
+  const gAdultoCB = determinarGrupoEtario('1708683873', 'CB', 'Jefe de Familia del SSC', 'Afiliado Seguro Campesino');
+  assert.strictEqual(gAdultoCB.esMenor, false);
+  assert.strictEqual(gAdultoCB.grupoEtario, 'Adulto');
+  assert.strictEqual(gAdultoCB.esMenorTexto, 'NO');
 
-  // Caso 3: Cédula extensión cobertura hijos menores
+  // Caso 3: Cédula extensión cobertura hijos menores (AG)
   const gMenorSG = determinarGrupoEtario('1750000000', 'AG', 'Hijo menor de 18 años', 'Extensión Cobertura');
   assert.strictEqual(gMenorSG.esMenor, true);
   assert.strictEqual(gMenorSG.grupoEtario, 'Menor de edad (Niño)');
